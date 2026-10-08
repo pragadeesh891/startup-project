@@ -189,28 +189,64 @@ def apply_custom_styles():
                 box-shadow: 0 4px 20px rgba(37, 99, 235, 0.05);
                 margin-bottom: 24px;
             }
-            .header-nav-pills {
-                display: flex;
-                align-items: center;
-                gap: 8px;
+
+            /* Outstanding Merged Navbar Buttons */
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button {
+                border-radius: 24px !important;
+                padding: 10px 18px !important;
+                font-weight: 700 !important;
+                font-size: 0.95rem !important;
+                transition: all 0.25s ease !important;
+                height: 44px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
             }
-            .header-nav-item {
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                padding: 8px 18px;
-                border-radius: 30px;
-                font-weight: 700;
-                font-size: 0.92rem;
-                color: #475569;
-                text-decoration: none;
-                transition: all 0.2s ease;
-                border: 1px solid transparent;
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="primary"] {
+                background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
+                color: #ffffff !important;
+                border: none !important;
+                box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3) !important;
             }
-            .header-nav-item.active {
-                background: #eff6ff;
-                color: #1d4ed8;
-                border-color: #bfdbfe;
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"] {
+                background: #ffffff !important;
+                color: #334155 !important;
+                border: 1.5px solid #e2e8f0 !important;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03) !important;
+            }
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"]:hover {
+                border-color: #93c5fd !important;
+                background: #f8fafc !important;
+                color: #1d4ed8 !important;
+                transform: translateY(-1px) !important;
+            }
+
+            /* Outstanding Action Tiles for View Analysis & Take Mock Test */
+            div.stButton > button[key*="btn_view_analysis"],
+            div.stButton > button[key*="btn_take_mock_test"],
+            button[data-testid*="btn_view_analysis"],
+            button[data-testid*="btn_take_mock_test"] {
+                background: #ffffff !important;
+                border: 1.5px solid #e2e8f0 !important;
+                border-radius: 20px !important;
+                padding: 16px 22px !important;
+                color: #0f172a !important;
+                box-shadow: 0 4px 16px rgba(37, 99, 235, 0.05) !important;
+                text-align: left !important;
+                white-space: pre-line !important;
+                line-height: 1.4 !important;
+                font-weight: 700 !important;
+                font-size: 0.95rem !important;
+                transition: all 0.25s ease !important;
+            }
+            div.stButton > button[key*="btn_view_analysis"]:hover,
+            div.stButton > button[key*="btn_take_mock_test"]:hover,
+            button[data-testid*="btn_view_analysis"]:hover,
+            button[data-testid*="btn_take_mock_test"]:hover {
+                border-color: #60a5fa !important;
+                background: #f8fafc !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 8px 24px rgba(37, 99, 235, 0.12) !important;
             }
 
             /* Logged-in Dashboard Cards */
@@ -593,6 +629,13 @@ def apply_custom_styles():
                 color: #ffffff !important;
                 box-shadow: 0 8px 32px rgba(37, 99, 235, 0.5) !important;
                 transform: translateY(-2px) !important;
+            }
+
+            /* Outstanding Action Tiles (View Analysis & Take Mock Test) */
+            div.stButton > button:has(div:contains("View Analysis")),
+            div.stButton > button:has(div:contains("Take Mock Test")),
+            div[data-testid="stVerticalBlock"] > div.stButton > button {
+                white-space: pre-line !important;
             }
 
             /* Custom Inputs - 100% Pure White Background Matching Screenshot */
