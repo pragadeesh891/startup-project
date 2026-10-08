@@ -1015,11 +1015,19 @@ def render_main_app():
         logo_src = ""
 
     # Navbar Columns: Logo | Nav items (Resume Analyzer, Mock Test, Performance) | User & Sign Out
-    c_brand, c_tabs, c_profile, c_logout = st.columns([1.2, 3.2, 1.0, 0.7])
+    c_brand, c_tabs, c_profile, c_logout = st.columns([1.3, 3.3, 0.95, 0.75])
     with c_brand:
-        st.markdown(f"""
-            <div style="display: flex; align-items: center; gap: 8px; padding-top: 6px;">
-                <img src="{logo_src}" alt="CareerPath.AI" style="height: 36px; object-fit: contain;" />
+        st.markdown("""
+            <div style="display: flex; align-items: center; gap: 8px; padding-top: 5px;">
+                <svg width="26" height="28" viewBox="0 0 26 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0;">
+                    <path d="M4 0C1.79086 0 0 1.79086 0 4V24C0 26.2091 1.79086 28 4 28H16L26 18V4C26 1.79086 24.2091 0 22 0H4Z" fill="#2563eb"/>
+                    <path d="M16 18H26L16 28V18Z" fill="#bfdbfe"/>
+                    <rect x="5" y="7" width="7" height="2.5" rx="1.25" fill="white"/>
+                    <circle cx="20" cy="7" r="1.5" fill="white"/>
+                    <rect x="5" y="13" width="15" height="2.5" rx="1.25" fill="white"/>
+                    <rect x="5" y="19" width="8" height="2.5" rx="1.25" fill="white"/>
+                </svg>
+                <span style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.4px; color: #1e293b; line-height: 1; white-space: nowrap;">Resume<span style="color: #2563eb;">Analyzer</span></span>
             </div>
         """, unsafe_allow_html=True)
     
@@ -1029,19 +1037,19 @@ def render_main_app():
         with t1:
             is_active_1 = (st.session_state.nav_page == "📄 Resume Analyzer")
             btn_style_1 = "primary" if is_active_1 else "secondary"
-            if st.button("📄  Resume Analyzer", type=btn_style_1, key="nav_resume_analyzer", use_container_width=True):
+            if st.button("Resume Analyzer", icon=":material/description:", type=btn_style_1, key="nav_resume_analyzer", use_container_width=True):
                 st.session_state.nav_page = "📄 Resume Analyzer"
                 st.rerun()
         with t2:
             is_active_2 = (st.session_state.nav_page == "📝 Proctored Mock Test")
             btn_style_2 = "primary" if is_active_2 else "secondary"
-            if st.button("📋  Mock Test", type=btn_style_2, key="nav_mock_test", use_container_width=True):
+            if st.button("Mock Test", icon=":material/assignment:", type=btn_style_2, key="nav_mock_test", use_container_width=True):
                 st.session_state.nav_page = "📝 Proctored Mock Test"
                 st.rerun()
         with t3:
             is_active_3 = (st.session_state.nav_page == "📊 Performance Dashboard")
             btn_style_3 = "primary" if is_active_3 else "secondary"
-            if st.button("📊  Performance", type=btn_style_3, key="nav_performance", use_container_width=True):
+            if st.button("Performance", icon=":material/bar_chart:", type=btn_style_3, key="nav_performance", use_container_width=True):
                 st.session_state.nav_page = "📊 Performance Dashboard"
                 st.rerun()
 
@@ -1056,7 +1064,7 @@ def render_main_app():
         """, unsafe_allow_html=True)
         
     with c_logout:
-        if st.button("↪  Sign Out", use_container_width=True):
+        if st.button("Sign Out", icon=":material/logout:", key="nav_sign_out", use_container_width=True):
             disable_proctoring()
             st.session_state.user = None
             reset_quiz()

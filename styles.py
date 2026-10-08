@@ -206,6 +206,7 @@ def apply_custom_styles():
                 align-items: center !important;
                 justify-content: center !important;
                 white-space: nowrap !important;
+                gap: 6px !important;
             }
             /* Active Button (Solid Vibrant Blue) */
             div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="primary"],
@@ -217,6 +218,16 @@ def apply_custom_styles():
                 border: none !important;
                 box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
             }
+            /* Active Button Icon - Crisp White */
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="primary"] [data-testid="stIconMaterial"],
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="primary"] span[class*="material"],
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="primary"] svg,
+            button[data-testid*="nav_resume_analyzer"][kind="primary"] [data-testid="stIconMaterial"] {
+                color: #ffffff !important;
+                fill: #ffffff !important;
+                font-size: 1.25rem !important;
+            }
+
             /* Inactive Buttons (Clean White with Soft Slate Text) */
             div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"],
             button[data-testid*="nav_resume_analyzer"][kind="secondary"],
@@ -227,6 +238,18 @@ def apply_custom_styles():
                 border: 1px solid rgba(226, 232, 240, 0.8) !important;
                 box-shadow: none !important;
             }
+            /* Inactive Buttons Icon - Vibrant Blue Color Matching Screenshot */
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"] [data-testid="stIconMaterial"],
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"] span[class*="material"],
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"] svg,
+            button[data-testid*="nav_mock_test"] [data-testid="stIconMaterial"],
+            button[data-testid*="nav_performance"] [data-testid="stIconMaterial"],
+            button[data-testid*="nav_resume_analyzer"][kind="secondary"] [data-testid="stIconMaterial"] {
+                color: #2563eb !important;
+                fill: #2563eb !important;
+                font-size: 1.25rem !important;
+            }
+
             div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"]:hover,
             button[data-testid*="nav_resume_analyzer"][kind="secondary"]:hover,
             button[data-testid*="nav_mock_test"][kind="secondary"]:hover,
@@ -238,7 +261,8 @@ def apply_custom_styles():
             }
 
             /* Sign Out Pill Matching Screenshot */
-            div[data-testid="column"]:nth-of-type(4) div.stButton > button {
+            div[data-testid="column"]:nth-of-type(4) div.stButton > button,
+            button[data-testid*="nav_sign_out"] {
                 border-radius: 50px !important;
                 padding: 7px 18px !important;
                 font-weight: 600 !important;
@@ -252,8 +276,18 @@ def apply_custom_styles():
                 align-items: center !important;
                 justify-content: center !important;
                 white-space: nowrap !important;
+                gap: 6px !important;
             }
-            div[data-testid="column"]:nth-of-type(4) div.stButton > button:hover {
+            div[data-testid="column"]:nth-of-type(4) div.stButton > button [data-testid="stIconMaterial"],
+            div[data-testid="column"]:nth-of-type(4) div.stButton > button span[class*="material"],
+            div[data-testid="column"]:nth-of-type(4) div.stButton > button svg,
+            button[data-testid*="nav_sign_out"] [data-testid="stIconMaterial"] {
+                color: #2563eb !important;
+                fill: #2563eb !important;
+                font-size: 1.15rem !important;
+            }
+            div[data-testid="column"]:nth-of-type(4) div.stButton > button:hover,
+            button[data-testid*="nav_sign_out"]:hover {
                 background: #eff6ff !important;
                 border-color: #93c5fd !important;
                 color: #1d4ed8 !important;
