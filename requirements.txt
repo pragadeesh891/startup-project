@@ -1,3 +1,5 @@
 streamlit
 PyPDF2
 spacy
+pymongo
+bcrypt
