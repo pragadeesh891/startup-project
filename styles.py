@@ -191,30 +191,46 @@ def apply_custom_styles():
             }
 
             /* Outstanding Merged Navbar Buttons */
-            div[data-testid="column"]:nth-of-type(2) div.stButton > button {
-                border-radius: 24px !important;
-                padding: 10px 18px !important;
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button,
+            button[data-testid*="nav_resume_analyzer"],
+            button[data-testid*="nav_mock_test"],
+            button[data-testid*="nav_performance"] {
+                border-radius: 20px !important;
+                padding: 10px 16px !important;
                 font-weight: 700 !important;
                 font-size: 0.95rem !important;
                 transition: all 0.25s ease !important;
-                height: 44px !important;
+                min-height: 46px !important;
+                height: 46px !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
             }
-            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="primary"] {
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="primary"],
+            button[data-testid*="nav_resume_analyzer"][kind="primary"],
+            button[data-testid*="nav_mock_test"][kind="primary"],
+            button[data-testid*="nav_performance"][kind="primary"] {
                 background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
                 color: #ffffff !important;
                 border: none !important;
-                box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3) !important;
+                box-shadow: 0 4px 18px rgba(37, 99, 235, 0.35) !important;
             }
-            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"] {
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"],
+            button[data-testid*="nav_resume_analyzer"][kind="secondary"],
+            button[data-testid*="nav_mock_test"][kind="secondary"],
+            button[data-testid*="nav_performance"][kind="secondary"] {
                 background: #ffffff !important;
                 color: #334155 !important;
                 border: 1.5px solid #e2e8f0 !important;
-                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03) !important;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
             }
-            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"]:hover {
+            div[data-testid="column"]:nth-of-type(2) div.stButton > button[kind="secondary"]:hover,
+            button[data-testid*="nav_resume_analyzer"][kind="secondary"]:hover,
+            button[data-testid*="nav_mock_test"][kind="secondary"]:hover,
+            button[data-testid*="nav_performance"][kind="secondary"]:hover {
                 border-color: #93c5fd !important;
                 background: #f8fafc !important;
                 color: #1d4ed8 !important;

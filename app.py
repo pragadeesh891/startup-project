@@ -1015,33 +1015,33 @@ def render_main_app():
         logo_src = ""
 
     # Navbar Columns: Logo | Nav items (Resume Analyzer, Mock Test, Performance) | User & Sign Out
-    c_brand, c_tabs, c_profile, c_logout = st.columns([1.6, 2.2, 1.2, 0.8])
+    c_brand, c_tabs, c_profile, c_logout = st.columns([1.2, 3.2, 1.0, 0.7])
     with c_brand:
         st.markdown(f"""
-            <div style="display: flex; align-items: center; gap: 8px; padding-top: 4px;">
-                <img src="{logo_src}" alt="CareerPath.AI" style="height: 38px; object-fit: contain;" />
+            <div style="display: flex; align-items: center; gap: 8px; padding-top: 6px;">
+                <img src="{logo_src}" alt="CareerPath.AI" style="height: 36px; object-fit: contain;" />
             </div>
         """, unsafe_allow_html=True)
     
     with c_tabs:
         # 3 Clean Capsule Navigation Pills
-        t1, t2, t3 = st.columns(3)
+        t1, t2, t3 = st.columns([1.15, 1.0, 1.05])
         with t1:
             is_active_1 = (st.session_state.nav_page == "📄 Resume Analyzer")
             btn_style_1 = "primary" if is_active_1 else "secondary"
-            if st.button("📄 Resume Analyzer", type=btn_style_1, use_container_width=True):
+            if st.button("📄  Resume Analyzer", type=btn_style_1, key="nav_resume_analyzer", use_container_width=True):
                 st.session_state.nav_page = "📄 Resume Analyzer"
                 st.rerun()
         with t2:
             is_active_2 = (st.session_state.nav_page == "📝 Proctored Mock Test")
             btn_style_2 = "primary" if is_active_2 else "secondary"
-            if st.button("📝 Mock Test", type=btn_style_2, use_container_width=True):
+            if st.button("📝  Mock Test", type=btn_style_2, key="nav_mock_test", use_container_width=True):
                 st.session_state.nav_page = "📝 Proctored Mock Test"
                 st.rerun()
         with t3:
             is_active_3 = (st.session_state.nav_page == "📊 Performance Dashboard")
             btn_style_3 = "primary" if is_active_3 else "secondary"
-            if st.button("📊 Performance", type=btn_style_3, use_container_width=True):
+            if st.button("📊  Performance", type=btn_style_3, key="nav_performance", use_container_width=True):
                 st.session_state.nav_page = "📊 Performance Dashboard"
                 st.rerun()
 
