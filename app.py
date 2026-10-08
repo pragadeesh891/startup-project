@@ -1024,8 +1024,8 @@ def render_main_app():
         """, unsafe_allow_html=True)
     
     with c_tabs:
-        # 3 Clean Capsule Navigation Pills
-        t1, t2, t3 = st.columns([1.15, 1.0, 1.05])
+        # 3 Clean Capsule Navigation Pills Matching Screenshot
+        t1, t2, t3 = st.columns([1.18, 1.0, 1.05])
         with t1:
             is_active_1 = (st.session_state.nav_page == "📄 Resume Analyzer")
             btn_style_1 = "primary" if is_active_1 else "secondary"
@@ -1035,7 +1035,7 @@ def render_main_app():
         with t2:
             is_active_2 = (st.session_state.nav_page == "📝 Proctored Mock Test")
             btn_style_2 = "primary" if is_active_2 else "secondary"
-            if st.button("📝  Mock Test", type=btn_style_2, key="nav_mock_test", use_container_width=True):
+            if st.button("📋  Mock Test", type=btn_style_2, key="nav_mock_test", use_container_width=True):
                 st.session_state.nav_page = "📝 Proctored Mock Test"
                 st.rerun()
         with t3:
@@ -1048,7 +1048,7 @@ def render_main_app():
     with c_profile:
         st.markdown(f"""
             <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 6px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%; background: #0284c7; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">
+                <div style="width: 32px; height: 32px; border-radius: 50%; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">
                     {user_initial}
                 </div>
                 <span style="font-weight: 700; font-size: 14px; color: #334155;">{user_name} ▾</span>
@@ -1056,7 +1056,7 @@ def render_main_app():
         """, unsafe_allow_html=True)
         
     with c_logout:
-        if st.button("🚪 Sign Out", use_container_width=True):
+        if st.button("↪  Sign Out", use_container_width=True):
             disable_proctoring()
             st.session_state.user = None
             reset_quiz()
