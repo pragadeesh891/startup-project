@@ -24,6 +24,8 @@ apply_custom_styles()
 # Session State Initialization
 if "user" not in st.session_state:
     st.session_state.user = None
+if "guest_state" not in st.session_state:
+    st.session_state.guest_state = "landing"
 if "nav_page" not in st.session_state:
     st.session_state.nav_page = "📄 Resume Analyzer"
 if "quiz_active" not in st.session_state:
@@ -926,77 +928,337 @@ def render_proctor_self_test():
 # ==============================================================================
 # AUTHENTICATION & LOGIN SCREEN (MATCHING USER REFERENCE DESIGN)
 # ==============================================================================
+
+def render_navbar():
+    try:
+        import assets_b64
+        logo_src = f"data:image/png;base64,{assets_b64.LOGO_B64}"
+    except Exception:
+        logo_src = ""
+        
+    st.markdown('''
+    <style>
+    .block-container { padding-top: 1rem !important; }
+    
+    /* Target only the first horizontal block (the navbar) */
+    div[data-testid="stHorizontalBlock"]:first-of-type {
+        align-items: center; /* Vertically center everything in the navbar row */
+    }
+    
+    /* Style nav buttons as text links */
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(3) button,
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(4) button,
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(5) button,
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(6) button {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: #475569 !important;
+        font-weight: 600 !important;
+        font-size: 0.95rem !important;
+        margin-top: 2px !important;
+    }
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(3) button:hover,
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(4) button:hover,
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(5) button:hover,
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(6) button:hover {
+        color: #2563eb !important;
+    }
+    
+    /* Active state for Home or About Us based on session_state can be added via python, but simple hover is fine */
+    
+    /* Sign In Button */
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(7) button {
+        color: #2563eb !important;
+        border: 1.5px solid #bfdbfe !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        padding: 0.5rem 1.2rem !important;
+        background: white !important;
+    }
+    div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(7) button:hover {
+        background-color: #eff6ff !important;
+    }
+    </style>
+    ''', unsafe_allow_html=True)
+    
+    col_logo, c_space, c_home, c_about, c_feat, c_contact, col_signin = st.columns([1.5, 1.5, 0.8, 0.9, 0.9, 0.9, 1.2])
+    with col_logo:
+        st.markdown(f'<img src="{logo_src}" style="height:36px; margin-top: 0px;">', unsafe_allow_html=True)
+        
+    with c_home:
+        if st.button("Home", use_container_width=True, key="nav_home"):
+            st.session_state.guest_state = "landing"
+            st.rerun()
+    with c_about:
+        if st.button("About Us", use_container_width=True, key="nav_about"):
+            st.session_state.guest_state = "about"
+            st.rerun()
+    with c_feat:
+        st.button("Features", use_container_width=True, key="nav_feat")
+    with c_contact:
+        st.button("Contact", use_container_width=True, key="nav_contact")
+        
+    with col_signin:
+        if st.button("👤 Sign In", use_container_width=True, key="nav_signin"):
+            st.session_state.guest_state = "auth"
+            st.rerun()
+
 def render_auth_page():
     disable_proctoring()
-    # MongoDB operates silently in background without showing online pill
     
-    col_l, col_center, col_r = st.columns([1, 2.3, 1])
-    with col_center:
-        try:
-            import assets_b64
-            logo_src = f"data:image/png;base64,{assets_b64.LOGO_B64}"
-        except Exception:
-            logo_src = ""
+    try:
+        import assets_b64
+        logo_src = f"data:image/png;base64,{assets_b64.LOGO_B64}"
+    except Exception:
+        logo_src = ""
+    
+    if st.session_state.guest_state == "landing":
+        render_navbar()
+        
+        c1, c2 = st.columns([1.5, 1])
 
-        # Header matching the screenshot exactly with the exact logo image
-        st.markdown(f"""
-            <div style="text-align: center; margin-top: 26px; margin-bottom: 22px;">
-                <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 14px;">
-                    <img src="{logo_src}" alt="CareerPath.AI" style="height: 56px; object-fit: contain; image-rendering: -webkit-optimize-contrast;" />
+        with c1:
+            st.markdown("""
+                <div style="margin-top: 10px;">
+                    <h1 style='font-size: 4.8rem; line-height: 1.15; font-weight: 800; color: #0f172a; margin-bottom: 20px; letter-spacing: -1px;'>
+                        Your Career.<br><span style="color: #6366f1;">Smarter Path.</span>
+                    </h1>
+                    <p style='font-size: 1.2rem; color: #475569; margin-bottom: 35px; max-width: 95%; line-height: 1.6;'>
+                        Upload your resume, get AI-powered insights, analyze your skills, and receive a personalized roadmap to reach your dream job.
+                    </p>
                 </div>
-                <div style="color: #475569; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.2px;">
-                    Enterprise Local AI Resume Optimization &amp; AI-Proctored Assessment
+            """, unsafe_allow_html=True)
+            
+            st.markdown("""
+            <style>
+            /* Left Card Button */
+            div[data-testid="column"]:has(#btn-analyze-marker) div[data-testid="stButton"] button {
+                background-color: #eff6ff !important;
+                border: 1.5px solid #bfdbfe !important;
+                border-radius: 12px !important;
+                padding: 18px !important;
+                height: 100% !important;
+                width: 100% !important;
+            }
+            div[data-testid="column"]:has(#btn-analyze-marker) div[data-testid="stButton"] button * {
+                color: #1e40af !important;
+                font-weight: 800 !important;
+                font-size: 1.15rem !important;
+            }
+            div[data-testid="column"]:has(#btn-analyze-marker) div[data-testid="stButton"] button:hover {
+                background-color: #dbeafe !important;
+            }
+            
+            /* Right Card Button */
+            div[data-testid="column"]:has(#btn-roadmap-marker) div[data-testid="stButton"] button {
+                background-color: #f5f3ff !important;
+                border: 1.5px solid #ddd6fe !important;
+                border-radius: 12px !important;
+                padding: 18px !important;
+                height: 100% !important;
+                width: 100% !important;
+            }
+            div[data-testid="column"]:has(#btn-roadmap-marker) div[data-testid="stButton"] button * {
+                color: #4338ca !important;
+                font-weight: 800 !important;
+                font-size: 1.15rem !important;
+            }
+            div[data-testid="column"]:has(#btn-roadmap-marker) div[data-testid="stButton"] button:hover {
+                background-color: #ede9fe !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                st.markdown('<div id="btn-analyze-marker"></div>', unsafe_allow_html=True)
+                if st.button("📄 Resume Analyze ➔", use_container_width=True):
+                    st.session_state.guest_state = "upload"
+                    st.rerun()
+            
+            with cc2:
+                st.markdown('<div id="btn-roadmap-marker"></div>', unsafe_allow_html=True)
+                if st.button("🗺️ Get Roadmap ➔", use_container_width=True):
+                    st.session_state.guest_state = "upload"
+                    st.rerun()
+                
+        with c2:
+            try:
+                import base64
+                with open(r"C:\Users\logas\.gemini\antigravity\brain\b48df9d2-c9a4-46fd-89fb-37fce92707ae\professional_girl_hero_1791616018393.jpg", "rb") as f:
+                    img_data = base64.b64encode(f.read()).decode()
+                # Smaller width to reduce length, with margin-top to align nicely
+                st.markdown(f'<img src="data:image/jpeg;base64,{img_data}" style="width:75%; border-radius: 20px; border: none; display: block; margin: 20px auto 0 auto;">', unsafe_allow_html=True)
+            except Exception:
+                st.info("Visual Placeholder")
+                
+        # Features Footer row
+        st.markdown("<div style='height: 60px;'></div>", unsafe_allow_html=True)
+        st.markdown("<hr style='border: none; border-top: 1px solid #e2e8f0; margin-bottom: 30px;'>", unsafe_allow_html=True)
+        
+        f1, f2, f3, f4, f5 = st.columns(5)
+        with f1:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>🧠 AI Powered Insights</div>", unsafe_allow_html=True)
+        with f2:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>🎯 Personalized Roadmaps</div>", unsafe_allow_html=True)
+        with f3:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>💼 Job & Internship Suggestions</div>", unsafe_allow_html=True)
+        with f4:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>📊 Skill Gap Analysis</div>", unsafe_allow_html=True)
+        with f5:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>🚀 Build a Stronger Future</div>", unsafe_allow_html=True)
+
+    elif st.session_state.guest_state == "about":
+        render_navbar()
+        
+        c1, c2 = st.columns([1.5, 1])
+        with c1:
+            st.markdown("""
+                <div style="margin-top: 10px;">
+                    <h1 style='font-size: 4.8rem; line-height: 1.15; font-weight: 800; color: #0f172a; margin-bottom: 20px; letter-spacing: -1px;'>
+                        Built for Students.<br><span style="color: #6366f1;">Guided by AI.</span>
+                    </h1>
+                    <p style='font-size: 1.2rem; color: #475569; margin-bottom: 20px; max-width: 95%; line-height: 1.6;'>
+                        This platform is specifically built for college students who are struggling with what to study and how to study. We provide a clear, step-by-step path to your dream job.
+                    </p>
+                    <div style="background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 30px; max-width: 90%;">
+                        <h4 style="color: #2563eb; margin: 0 0 10px 0; font-weight: 700; font-size: 1.1rem;">Your Journey to Success:</h4>
+                        <ul style="color: #475569; font-size: 1.05rem; line-height: 1.6; margin: 0; padding-left: 20px;">
+                            <li style="margin-bottom: 8px;"><strong>Analyze:</strong> Evaluate your resume to identify strengths and skill gaps.</li>
+                            <li style="margin-bottom: 8px;"><strong>Test:</strong> Take mock tests to validate your technical skills.</li>
+                            <li><strong>Achieve:</strong> Receive your personalized roadmap and guidance to reach your career goals.</li>
+                        </ul>
+                    </div>
                 </div>
-            </div>
+            """, unsafe_allow_html=True)
+            
+        with c2:
+            try:
+                import base64
+                with open(r"C:\Users\logas\.gemini\antigravity\brain\b48df9d2-c9a4-46fd-89fb-37fce92707ae\professional_girl_hero_1791616018393.jpg", "rb") as f:
+                    img_data = base64.b64encode(f.read()).decode()
+                st.markdown(f'<img src="data:image/jpeg;base64,{img_data}" style="width:75%; border-radius: 20px; border: none; display: block; margin: 20px auto 0 auto;">', unsafe_allow_html=True)
+            except Exception:
+                st.info("Visual Placeholder")
+        
+    elif st.session_state.guest_state == "upload":
+        render_navbar()
+                
+        st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #0f172a; font-weight: 800;'>Upload Your Resume</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #475569; margin-bottom: 30px;'>Get an instant analysis and personalized learning roadmap.</p>", unsafe_allow_html=True)
+        
+        st.markdown("""
+        <style>
+        [data-testid="stFileUploaderDropzone"] {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4) !important;
+            border: none !important;
+            border-radius: 16px !important;
+            padding: 40px !important;
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.3) !important;
+        }
+        [data-testid="stFileUploaderDropzoneInstructions"] * {
+            color: #ffffff !important;
+            font-size: 1.1rem !important;
+        }
+        [data-testid="stFileUploaderDropzone"] small {
+            color: rgba(255, 255, 255, 0.8) !important;
+        }
+        [data-testid="stFileUploaderDropzone"] button {
+            background-color: #ffffff !important;
+            color: #2563eb !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-weight: 700 !important;
+        }
+        [data-testid="stFileUploaderDropzone"] button:hover {
+            background-color: #f8fafc !important;
+            color: #1d4ed8 !important;
+        }
+        </style>
         """, unsafe_allow_html=True)
-
-        tab_login, tab_register = st.tabs(["🔒 Sign In", "👤 Create Account"])
-
-        # Tab: Sign In (Matches screenshot Welcome Back form exactly)
-        with tab_login:
-            st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
-            with st.form("login_form"):
-                st.markdown("<h3 style='margin-top:0; margin-bottom:16px; font-size: 1.6rem; font-weight:800; color:#0f172a;'>Welcome Back</h3>", unsafe_allow_html=True)
-                email = st.text_input("Work Email Address", placeholder="alex@company.com")
-                password = st.text_input("Password", type="password", placeholder="••••••••••••")
-                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-                submit = st.form_submit_button("Sign In to Portal ➔", use_container_width=True)
-                
-                if submit:
-                    if not email or not password:
-                        st.error("Please enter both email and password.")
+        
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c2:
+            uploaded_file = st.file_uploader("Drop PDF here", type=["pdf"])
+            st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+            
+            b1, b2 = st.columns(2)
+            with b1:
+                if st.button("Analyze", type="primary", use_container_width=True):
+                    if uploaded_file is not None:
+                        st.session_state.guest_state = "auth"
+                        st.rerun()
                     else:
-                        with st.spinner("Authenticating credentials..."):
-                            success, msg, user = database.authenticate_user(email, password)
-                            if success:
-                                st.session_state.user = user
-                                st.rerun()
-                            else:
-                                st.error(msg)
+                        st.error("Please upload a resume first.")
+            with b2:
+                if st.button("Back", use_container_width=True):
+                    st.session_state.guest_state = "landing"
+                    st.rerun()
 
-        # Tab: Create Account
-        with tab_register:
-            st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
-            with st.form("register_form"):
-                st.markdown("<h3 style='margin-top:0; margin-bottom:16px; font-size: 1.6rem; font-weight:800; color:#0f172a;'>Create Profile</h3>", unsafe_allow_html=True)
-                reg_name = st.text_input("Full Legal Name", placeholder="Alex Morgan")
-                reg_email = st.text_input("Work Email Address", placeholder="alex@company.com")
-                reg_password = st.text_input("Password (min 6 characters)", type="password", placeholder="••••••••••••")
-                reg_confirm = st.text_input("Confirm Password", type="password", placeholder="••••••••••••")
-                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-                reg_submit = st.form_submit_button("Create Account ➔", use_container_width=True)
-                
-                if reg_submit:
-                    if reg_password != reg_confirm:
-                        st.error("Passwords do not match!")
-                    else:
-                        with st.spinner("Creating profile..."):
-                            success, msg, user = database.register_user(reg_name, reg_email, reg_password)
-                            if success:
-                                st.session_state.user = user
-                                st.rerun()
-                            else:
-                                st.error(msg)
+    else:
+        # Existing Auth Page Logic
+        col_l, col_center, col_r = st.columns([1, 2.3, 1])
+        with col_center:
+            st.markdown(f"""
+                <div style="text-align: center; margin-top: 26px; margin-bottom: 22px;">
+                    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 14px;">
+                        <img src="{logo_src}" alt="CareerPath.AI" style="height: 56px; object-fit: contain; image-rendering: -webkit-optimize-contrast;" />
+                    </div>
+                    <div style="color: #475569; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.2px;">
+                        Enterprise Local AI Resume Optimization &amp; AI-Proctored Assessment
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            st.info("Please sign in or create an account to view your analysis and roadmap.")
+
+            tab_login, tab_register = st.tabs(["🔒 Sign In", "👤 Create Account"])
+
+            with tab_login:
+                st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+                with st.form("login_form"):
+                    st.markdown("<h3 style='margin-top:0; margin-bottom:16px; font-size: 1.6rem; font-weight:800; color:#0f172a;'>Welcome Back</h3>", unsafe_allow_html=True)
+                    email = st.text_input("Work Email Address", placeholder="alex@company.com")
+                    password = st.text_input("Password", type="password", placeholder="••••••••••••")
+                    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+                    submit = st.form_submit_button("Sign In to Portal ➔", use_container_width=True)
+                    
+                    if submit:
+                        if not email or not password:
+                            st.error("Please enter both email and password.")
+                        else:
+                            with st.spinner("Authenticating credentials..."):
+                                success, msg, user = database.authenticate_user(email, password)
+                                if success:
+                                    st.session_state.user = user
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+
+            with tab_register:
+                st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+                with st.form("register_form"):
+                    st.markdown("<h3 style='margin-top:0; margin-bottom:16px; font-size: 1.6rem; font-weight:800; color:#0f172a;'>Create Profile</h3>", unsafe_allow_html=True)
+                    reg_name = st.text_input("Full Legal Name", placeholder="Alex Morgan")
+                    reg_email = st.text_input("Work Email Address", placeholder="alex@company.com")
+                    reg_password = st.text_input("Password (min 6 characters)", type="password", placeholder="••••••••••••")
+                    reg_confirm = st.text_input("Confirm Password", type="password", placeholder="••••••••••••")
+                    st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+                    reg_submit = st.form_submit_button("Create Account ➔", use_container_width=True)
+                    
+                    if reg_submit:
+                        if reg_password != reg_confirm:
+                            st.error("Passwords do not match!")
+                        else:
+                            with st.spinner("Creating profile..."):
+                                success, msg, user = database.register_user(reg_name, reg_email, reg_password)
+                                if success:
+                                    st.session_state.user = user
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
 
 
 # ==============================================================================
