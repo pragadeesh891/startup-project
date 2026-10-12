@@ -1914,12 +1914,12 @@ def render_main_app():
         is_dark = st.session_state.get("theme_mode", "light") == "dark"
         logo_text_color = "#f8fafc" if is_dark else "#0f172a"
         st.markdown(f"""
-            <div style="display: flex; align-items: center; gap: 10px; padding: 0px 4px 12px 4px; margin-top: -12px;">
+            <div style="display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 4px; margin-top: -8px;">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 14L8 8L13 13L21 4M21 4H15M21 4V10" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     <rect x="2" y="19" width="20" height="2.5" rx="1" fill="#2563eb"/>
                 </svg>
-                <span style="font-size: 1.35rem; font-weight: 800; color: {logo_text_color}; letter-spacing: -0.5px;">CareerPath<span style="color: #2563eb;">.Ai</span></span>
+                <span style="font-size: 1.35rem; font-weight: 800; color: {logo_text_color}; letter-spacing: -0.5px; line-height: 1;">CareerPath<span style="color: #2563eb;">.Ai</span></span>
             </div>
         """, unsafe_allow_html=True)
 
@@ -1974,10 +1974,10 @@ def render_main_app():
         search_border = "#334155" if is_dark else "#e2e8f0"
         search_color = "#f8fafc" if is_dark else "#0f172a"
         st.markdown(f"""
-            <div style="position: relative; display: flex; align-items: center; margin-top: -8px;">
+            <div style="position: relative; display: flex; align-items: center; height: 42px; margin-top: -8px;">
                 <span style="position: absolute; left: 16px; color: #94a3b8; font-size: 16px; pointer-events: none;">🔍</span>
                 <input type="text" placeholder="Search features, skills, or anything..." 
-                    style="width: 100%; padding: 10px 16px 10px 42px; border-radius: 9999px; border: 1.5px solid {search_border}; background: {search_bg}; color: {search_color}; font-size: 0.9rem; font-family: 'Plus Jakarta Sans', sans-serif; outline: none;" />
+                    style="width: 100%; height: 42px; box-sizing: border-box; padding: 0 16px 0 42px; border-radius: 9999px; border: 1.5px solid {search_border}; background: {search_bg}; color: {search_color}; font-size: 0.9rem; font-family: 'Plus Jakarta Sans', sans-serif; outline: none;" />
             </div>
         """, unsafe_allow_html=True)
 
@@ -1992,7 +1992,7 @@ def render_main_app():
         user_border = "#334155" if is_dark else "#e2e8f0"
         user_text = "#f8fafc" if is_dark else "#0f172a"
         st.markdown(f"""
-            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: -8px;">
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 14px; height: 42px; margin-top: -8px;">
                 <!-- Notification Bell -->
                 <div style="position: relative; padding: 6px; border-radius: 50%; background: {user_bg}; border: 1px solid {user_border}; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; cursor: pointer;">
                     <span style="font-size: 16px;">🔔</span>
@@ -2016,13 +2016,6 @@ def render_main_app():
     # ==========================================================================
     if st.session_state.nav_page in ["📄 Resume Analyzer", "Resume Analyzer"]:
         disable_proctoring()
-
-        # Breadcrumb Link
-        c_bc, _ = st.columns([1, 4])
-        with c_bc:
-            if st.button("← Back to Home", key="ra_back_home", type="secondary"):
-                st.session_state.nav_page = "🏠 Home"
-                st.rerun()
 
         # Page Title Block
         st.markdown("""
