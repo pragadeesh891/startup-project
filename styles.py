@@ -79,16 +79,21 @@ def get_career_path_svg_url():
     )
     return f"data:image/svg+xml,{urllib.parse.quote(svg)}"
 
-def apply_custom_styles():
+def apply_custom_styles(theme_mode="light"):
     """
     Transforms Streamlit into a modern, high-conversion White and Blue SaaS UI matching
     the exact design from the specification and user screenshot.
+    Supports seamless switching between Light Mode and Dark Mode.
     """
+    is_dark = theme_mode == "dark"
     try:
         import assets_b64
         bg_b64 = assets_b64.CLEAN_BG_B64
     except Exception:
         bg_b64 = ""
+
+    canvas_bg = "#0b0f19" if is_dark else "#f8fafc"
+    canvas_opacity = "0.2" if is_dark else "1"
 
     js_flowing_waves = f"""
     <script>
@@ -108,11 +113,12 @@ def apply_custom_styles():
         wrap.style.pointerEvents = 'none';
         wrap.style.zIndex = '0';
         wrap.style.overflow = 'hidden';
-        wrap.style.backgroundColor = '#f8fafc';
+        wrap.style.backgroundColor = '{canvas_bg}';
         wrap.style.backgroundImage = 'url("data:image/png;base64,{bg_b64}")';
         wrap.style.backgroundRepeat = 'no-repeat';
         wrap.style.backgroundPosition = 'center center';
         wrap.style.backgroundSize = 'cover';
+        wrap.style.opacity = '{canvas_opacity}';
         
         parentDoc.body.prepend(wrap);
     </script>
@@ -120,34 +126,80 @@ def apply_custom_styles():
     import streamlit.components.v1 as components
     components.html(js_flowing_waves, height=0, width=0)
 
+    # Theme-dependent palette
+    sidebar_bg = "#0f172a" if is_dark else "#ffffff"
+    sidebar_border = "#1e293b" if is_dark else "#e2e8f0"
+    sidebar_btn_color = "#94a3b8" if is_dark else "#475569"
+    sidebar_btn_hover = "#1e293b" if is_dark else "#f8fafc"
+    sidebar_btn_hover_text = "#f8fafc" if is_dark else "#0f172a"
+    sidebar_active_bg = "#1e3a8a" if is_dark else "#eef2ff"
+    sidebar_active_text = "#60a5fa" if is_dark else "#2563eb"
+    app_bg = "#0b0f19" if is_dark else "#f8fafc"
+    text_main = "#f8fafc" if is_dark else "#0f172a"
+    text_muted = "#94a3b8" if is_dark else "#475569"
+    text_sub = "#cbd5e1" if is_dark else "#334155"
+    card_bg = "#1e293b" if is_dark else "rgba(255, 255, 255, 0.98)"
+    card_border = "#334155" if is_dark else "rgba(226, 232, 240, 0.95)"
+    theme_btn_bg = "#1e293b" if is_dark else "#f1f5f9"
+    theme_btn_border = "#334155" if is_dark else "#e2e8f0"
+    theme_btn_hover = "#334155" if is_dark else "#e2e8f0"
 
-    st.markdown("""
+    st.markdown(f"""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
 
             /* Complete Streamlit Default Chrome Removal */
-            header[data-testid="stHeader"] { display: none !important; }
-            div[data-testid="stDecoration"] { display: none !important; }
-            div[data-testid="stStatusWidget"] { display: none !important; }
-            #MainMenu { visibility: hidden !important; }
-            footer { display: none !important; }
-            [data-testid="collapsedControl"] { display: none !important; }
+            header[data-testid="stHeader"] {{ display: none !important; }}
+            div[data-testid="stDecoration"] {{ display: none !important; }}
+            div[data-testid="stStatusWidget"] {{ display: none !important; }}
+            #MainMenu {{ visibility: hidden !important; }}
+            footer {{ display: none !important; }}
+            [data-testid="collapsedControl"] {{ display: none !important; }}
+
+            /* Complete Streamlit Sidebar Header and Blank Space Removal */
+            section[data-testid="stSidebar"] [data-testid="stSidebarHeader"],
+            section[data-testid="stSidebar"] div[data-testid="stSidebarHeader"],
+            section[data-testid="stSidebar"] header,
+            section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {{
+                display: none !important;
+                height: 0px !important;
+                min-height: 0px !important;
+                max-height: 0px !important;
+                padding: 0px !important;
+                margin: 0px !important;
+                overflow: hidden !important;
+                visibility: hidden !important;
+            }}
+            section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+            section[data-testid="stSidebar"] div[data-testid="stSidebarUserContent"],
+            section[data-testid="stSidebar"] div.st-emotion-cache-16txtl3,
+            section[data-testid="stSidebar"] div.st-emotion-cache-6qob1r,
+            section[data-testid="stSidebar"] div.stSidebarUserContent {{
+                padding-top: 0.15rem !important;
+                margin-top: 0px !important;
+            }}
+            section[data-testid="stSidebar"] > div:first-child {{
+                padding-top: 0.15rem !important;
+                padding-bottom: 0.8rem !important;
+                padding-left: 0.8rem !important;
+                padding-right: 0.8rem !important;
+            }}
+            section[data-testid="stSidebar"] .block-container {{
+                padding-top: 0.15rem !important;
+            }}
 
             /* Modern SaaS Sidebar Styling matching User Screenshot */
-            section[data-testid="stSidebar"] {
+            section[data-testid="stSidebar"] {{
                 display: block !important;
-                background-color: #ffffff !important;
-                border-right: 1.5px solid #e2e8f0 !important;
+                background-color: {sidebar_bg} !important;
+                border-right: 1.5px solid {sidebar_border} !important;
                 width: 250px !important;
                 min-width: 250px !important;
                 max-width: 250px !important;
                 box-shadow: 2px 0 10px rgba(15, 23, 42, 0.03) !important;
-            }
-            section[data-testid="stSidebar"] > div:first-child {
-                padding: 1.2rem 0.9rem !important;
-            }
+            }}
             /* Sidebar Nav Buttons */
-            section[data-testid="stSidebar"] div.stButton > button {
+            section[data-testid="stSidebar"] div.stButton > button {{
                 width: 100% !important;
                 display: flex !important;
                 justify-content: flex-start !important;
@@ -158,62 +210,92 @@ def apply_custom_styles():
                 font-weight: 600 !important;
                 border: none !important;
                 background: transparent !important;
-                color: #475569 !important;
+                color: {sidebar_btn_color} !important;
                 box-shadow: none !important;
                 transition: all 0.15s ease !important;
                 text-align: left !important;
                 gap: 10px !important;
-            }
-            section[data-testid="stSidebar"] div.stButton > button:hover {
-                background-color: #f8fafc !important;
-                color: #0f172a !important;
-            }
+            }}
+            section[data-testid="stSidebar"] div.stButton > button:hover {{
+                background-color: {sidebar_btn_hover} !important;
+                color: {sidebar_btn_hover_text} !important;
+            }}
             /* Sidebar Active Nav Button (Highlight Capsule) */
-            section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-                background-color: #eef2ff !important;
-                color: #2563eb !important;
+            section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {{
+                background-color: {sidebar_active_bg} !important;
+                color: {sidebar_active_text} !important;
                 font-weight: 800 !important;
                 border: none !important;
-            }
-            section[data-testid="stSidebar"] div.stButton > button[kind="primary"] * {
-                color: #2563eb !important;
+            }}
+            section[data-testid="stSidebar"] div.stButton > button[kind="primary"] * {{
+                color: {sidebar_active_text} !important;
                 font-weight: 800 !important;
-            }
+            }}
 
             /* Enterprise White & Royal Blue Design System Variables */
-            :root {
+            :root {{
                 --primary: #2563eb;
                 --primary-dark: #1d4ed8;
                 --primary-light: #60a5fa;
                 --primary-glow: rgba(37, 99, 235, 0.25);
-                --bg-base: #f8fafc;
-                --bg-card: rgba(255, 255, 255, 0.98);
-                --border-card: rgba(226, 232, 240, 0.95);
-                --text-main: #0f172a;
-                --text-muted: #475569;
-                --text-sub: #64748b;
+                --bg-base: {app_bg};
+                --bg-card: {card_bg};
+                --border-card: {card_border};
+                --text-main: {text_main};
+                --text-muted: {text_muted};
+                --text-sub: {text_sub};
                 --accent-blue: #0284c7;
-                --soft-blue: #eff6ff;
-            }
+                --soft-blue: {'#1e293b' if is_dark else '#eff6ff'};
+            }}
 
             /* Global App Canvas */
-            html, body, [class*="css"], .stApp {
+            html, body, [class*="css"], .stApp {{
                 font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-                background-color: #f8fafc !important;
-                color: #0f172a !important;
-            }
+                background-color: {app_bg} !important;
+                color: {text_main} !important;
+            }}
 
             /* Headers and Core Typography */
-            h1, h2, h3, h4, h5, h6 {
+            h1, h2, h3, h4, h5, h6 {{
                 font-family: 'Plus Jakarta Sans', sans-serif !important;
-                color: #0f172a !important;
+                color: {text_main} !important;
                 font-weight: 800 !important;
                 letter-spacing: -0.4px !important;
-            }
-            p, span, div, label {
-                color: #334155;
-            }
+            }}
+            p, span, div, label {{
+                color: {text_sub};
+            }}
 
+            /* Header Theme Toggle Pill */
+            button[key="header_theme_toggle_btn"],
+            div[data-testid="column"] button[key="header_theme_toggle_btn"] {{
+                background: {theme_btn_bg} !important;
+                border: 1.5px solid {theme_btn_border} !important;
+                border-radius: 9999px !important;
+                padding: 6px 14px !important;
+                height: 40px !important;
+                min-height: 40px !important;
+                font-size: 0.88rem !important;
+                font-weight: 700 !important;
+                color: {text_main} !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 6px !important;
+                box-shadow: none !important;
+                cursor: pointer !important;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            }}
+            button[key="header_theme_toggle_btn"]:hover {{
+                border-color: #3b82f6 !important;
+                background: {theme_btn_hover} !important;
+                transform: translateY(-1px) !important;
+            }}
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+        <style>
             /* Main Layout Width & Margins */
             .main .block-container {
                 position: relative !important;

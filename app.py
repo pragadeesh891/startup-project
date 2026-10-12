@@ -19,8 +19,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Session State Theme Initialization
+if "theme_mode" not in st.session_state:
+    st.session_state.theme_mode = "light"
+
 # Apply custom White and Royal Blue SaaS styling matching user reference design
-apply_custom_styles()
+apply_custom_styles(theme_mode=st.session_state.theme_mode)
 
 # Session State Initialization
 if "user" not in st.session_state:
@@ -1907,13 +1911,15 @@ def render_main_app():
     # ==========================================================================
     with st.sidebar:
         # Brand Logo
-        st.markdown("""
-            <div style="display: flex; align-items: center; gap: 10px; padding: 4px 4px 18px 4px;">
+        is_dark = st.session_state.get("theme_mode", "light") == "dark"
+        logo_text_color = "#f8fafc" if is_dark else "#0f172a"
+        st.markdown(f"""
+            <div style="display: flex; align-items: center; gap: 10px; padding: 0px 4px 12px 4px; margin-top: -12px;">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 14L8 8L13 13L21 4M21 4H15M21 4V10" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     <rect x="2" y="19" width="20" height="2.5" rx="1" fill="#2563eb"/>
                 </svg>
-                <span style="font-size: 1.35rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">CareerPath<span style="color: #2563eb;">.Ai</span></span>
+                <span style="font-size: 1.35rem; font-weight: 800; color: {logo_text_color}; letter-spacing: -0.5px;">CareerPath<span style="color: #2563eb;">.Ai</span></span>
             </div>
         """, unsafe_allow_html=True)
 
@@ -1961,35 +1967,43 @@ def render_main_app():
     # ==========================================================================
     # 2. TOP HEADER BAR (EXACT MATCH TO USER SCREENSHOT)
     # ==========================================================================
-    col_search, col_spacer, col_user = st.columns([1.8, 0.4, 1.4])
+    col_search, col_spacer, col_theme_col, col_user = st.columns([1.7, 0.1, 0.5, 1.3])
+    is_dark = st.session_state.get("theme_mode", "light") == "dark"
     with col_search:
-        st.markdown("""
+        search_bg = "#1e293b" if is_dark else "#ffffff"
+        search_border = "#334155" if is_dark else "#e2e8f0"
+        search_color = "#f8fafc" if is_dark else "#0f172a"
+        st.markdown(f"""
             <div style="position: relative; display: flex; align-items: center;">
                 <span style="position: absolute; left: 16px; color: #94a3b8; font-size: 16px; pointer-events: none;">🔍</span>
                 <input type="text" placeholder="Search features, skills, or anything..." 
-                    style="width: 100%; padding: 10px 16px 10px 42px; border-radius: 9999px; border: 1.5px solid #e2e8f0; background: #ffffff; color: #0f172a; font-size: 0.9rem; font-family: 'Plus Jakarta Sans', sans-serif; outline: none;" />
+                    style="width: 100%; padding: 10px 16px 10px 42px; border-radius: 9999px; border: 1.5px solid {search_border}; background: {search_bg}; color: {search_color}; font-size: 0.9rem; font-family: 'Plus Jakarta Sans', sans-serif; outline: none;" />
             </div>
         """, unsafe_allow_html=True)
 
+    with col_theme_col:
+        theme_btn_label = "🌙 Dark" if is_dark else "☀️ Light"
+        if st.button(theme_btn_label, key="header_theme_toggle_btn", help="Click to switch between Light Mode and Dark Mode"):
+            st.session_state.theme_mode = "light" if is_dark else "dark"
+            st.rerun()
+
     with col_user:
+        user_bg = "#1e293b" if is_dark else "#ffffff"
+        user_border = "#334155" if is_dark else "#e2e8f0"
+        user_text = "#f8fafc" if is_dark else "#0f172a"
         st.markdown(f"""
             <div style="display: flex; align-items: center; justify-content: flex-end; gap: 14px;">
-                <!-- Theme Toggle Pill -->
-                <div style="display: flex; align-items: center; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 4px 8px; gap: 6px; cursor: pointer;">
-                    <span style="font-size: 14px;">☀️</span>
-                    <span style="font-size: 14px; opacity: 0.45;">🌙</span>
-                </div>
                 <!-- Notification Bell -->
-                <div style="position: relative; padding: 6px; border-radius: 50%; background: #ffffff; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; cursor: pointer;">
+                <div style="position: relative; padding: 6px; border-radius: 50%; background: {user_bg}; border: 1px solid {user_border}; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; cursor: pointer;">
                     <span style="font-size: 16px;">🔔</span>
-                    <span style="position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; background: #f43f5e; border-radius: 50%; border: 1.5px solid #ffffff;"></span>
+                    <span style="position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; background: #f43f5e; border-radius: 50%; border: 1.5px solid {user_bg};"></span>
                 </div>
                 <!-- User Profile Chip -->
-                <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 9999px; background: #ffffff; border: 1.5px solid #e2e8f0; cursor: pointer;">
+                <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 9999px; background: {user_bg}; border: 1.5px solid {user_border}; cursor: pointer;">
                     <div style="width: 30px; height: 30px; border-radius: 50%; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">
                         {user_initial}
                     </div>
-                    <span style="font-weight: 800; font-size: 0.85rem; color: #0f172a; text-transform: uppercase; letter-spacing: 0.4px;">{display_name}</span>
+                    <span style="font-weight: 800; font-size: 0.85rem; color: {user_text}; text-transform: uppercase; letter-spacing: 0.4px;">{display_name}</span>
                     <span style="color: #64748b; font-size: 11px;">⌄</span>
                 </div>
             </div>
