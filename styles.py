@@ -148,13 +148,39 @@ def apply_custom_styles(theme_mode="light"):
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
 
-            /* Complete Streamlit Default Chrome Removal */
-            header[data-testid="stHeader"] {{ display: none !important; }}
+            /* Complete Streamlit Default Chrome & Top Void Removal */
+            header[data-testid="stHeader"],
+            div[data-testid="stHeader"],
+            .stApp > header {{
+                display: none !important;
+                height: 0px !important;
+                min-height: 0px !important;
+                max-height: 0px !important;
+                margin: 0px !important;
+                padding: 0px !important;
+                visibility: hidden !important;
+                overflow: hidden !important;
+            }}
             div[data-testid="stDecoration"] {{ display: none !important; }}
             div[data-testid="stStatusWidget"] {{ display: none !important; }}
             #MainMenu {{ visibility: hidden !important; }}
             footer {{ display: none !important; }}
             [data-testid="collapsedControl"] {{ display: none !important; }}
+
+            /* Collapse components.html iframe container to zero height */
+            iframe[title="streamlit.components.v1.html"],
+            div[data-testid="element-container"]:has(iframe[title="streamlit.components.v1.html"]),
+            div.element-container:has(iframe[title="streamlit.components.v1.html"]),
+            div[data-testid="stCustomComponentV1"],
+            .stCustomComponentV1 {{
+                display: none !important;
+                height: 0px !important;
+                min-height: 0px !important;
+                max-height: 0px !important;
+                margin: 0px !important;
+                padding: 0px !important;
+                border: none !important;
+            }}
 
             /* Complete Streamlit Sidebar Header and Blank Space Removal */
             section[data-testid="stSidebar"] [data-testid="stSidebarHeader"],
@@ -284,6 +310,7 @@ def apply_custom_styles(theme_mode="light"):
                 gap: 6px !important;
                 box-shadow: none !important;
                 cursor: pointer !important;
+                margin-top: -8px !important;
                 transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
             }}
             button[key="header_theme_toggle_btn"]:hover {{
@@ -296,11 +323,18 @@ def apply_custom_styles(theme_mode="light"):
 
     st.markdown("""
         <style>
-            /* Main Layout Width & Margins */
-            .main .block-container {
+            /* Main Layout Width & Margins - Zero top padding above search bar */
+            .main .block-container,
+            .block-container,
+            div[data-testid="stMainBlockContainer"],
+            div[data-testid="stAppViewBlockContainer"],
+            section.main div[data-testid="stMainBlockContainer"],
+            section.main .block-container,
+            div[data-testid="block-container"] {
                 position: relative !important;
                 z-index: 1 !important;
-                padding-top: 1.2rem !important;
+                padding-top: 0.15rem !important;
+                margin-top: 0px !important;
                 padding-bottom: 3.5rem !important;
                 padding-left: 2rem !important;
                 padding-right: 2rem !important;

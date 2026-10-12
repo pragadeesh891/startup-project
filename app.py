@@ -1974,7 +1974,7 @@ def render_main_app():
         search_border = "#334155" if is_dark else "#e2e8f0"
         search_color = "#f8fafc" if is_dark else "#0f172a"
         st.markdown(f"""
-            <div style="position: relative; display: flex; align-items: center;">
+            <div style="position: relative; display: flex; align-items: center; margin-top: -8px;">
                 <span style="position: absolute; left: 16px; color: #94a3b8; font-size: 16px; pointer-events: none;">🔍</span>
                 <input type="text" placeholder="Search features, skills, or anything..." 
                     style="width: 100%; padding: 10px 16px 10px 42px; border-radius: 9999px; border: 1.5px solid {search_border}; background: {search_bg}; color: {search_color}; font-size: 0.9rem; font-family: 'Plus Jakarta Sans', sans-serif; outline: none;" />
@@ -1992,7 +1992,7 @@ def render_main_app():
         user_border = "#334155" if is_dark else "#e2e8f0"
         user_text = "#f8fafc" if is_dark else "#0f172a"
         st.markdown(f"""
-            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 14px;">
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: -8px;">
                 <!-- Notification Bell -->
                 <div style="position: relative; padding: 6px; border-radius: 50%; background: {user_bg}; border: 1px solid {user_border}; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; cursor: pointer;">
                     <span style="font-size: 16px;">🔔</span>
