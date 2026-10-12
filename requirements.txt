@@ -3,3 +3,6 @@ PyPDF2
 spacy
 pymongo
 bcrypt
+requests
+google-auth
+python-dotenv

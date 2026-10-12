@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from pymongo import MongoClient, ASCENDING, DESCENDING
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
+from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError, DuplicateKeyError
 import bcrypt
 
 # Default to local MongoDB instance, or configure via environment variable
@@ -46,6 +46,7 @@ def init_indexes():
         db = get_db()
         if db is not None:
             db.users.create_index([("email", ASCENDING)], unique=True)
+            db.users.create_index([("google_sub", ASCENDING)], unique=True, sparse=True)
             db.resume_scans.create_index([("user_email", ASCENDING), ("uploaded_at", DESCENDING)])
             db.mock_tests.create_index([("user_email", ASCENDING), ("timestamp", DESCENDING)])
     except Exception as e:
@@ -136,6 +137,89 @@ def authenticate_user(email: str, password: str):
         return True, "Login successful!", user
     except Exception as e:
         return False, f"Authentication error: {str(e)}", None
+
+def authenticate_or_register_google_user(email: str, name: str = "Google User", picture: str = "", google_sub: str = ""):
+    """
+    Authenticates an existing user or creates a new user profile via authentic Google Sign-In.
+    Safely preserves all existing user progress, scores, roadmaps, and profile data.
+    Returns: (success: bool, message: str, user_dict: dict or None)
+    """
+    email = email.strip().lower()
+    name = name.strip() or "Google User"
+    google_sub = google_sub.strip()
+    db = get_db()
+    if db is None:
+        return True, "Signed in via Google", {
+            "name": name,
+            "email": email,
+            "avatar_url": picture,
+            "google_sub": google_sub,
+            "auth_provider": "google",
+            "_id": "google_local_session"
+        }
+    try:
+        now = datetime.utcnow()
+        # 1. Search by stable Google subject identifier first
+        user = None
+        if google_sub:
+            user = db.users.find_one({"google_sub": google_sub})
+
+        if user:
+            # Returning Google user: update last login and profile picture if available
+            update_fields = {"last_login": now}
+            if picture and not user.get("avatar_url"):
+                update_fields["avatar_url"] = picture
+            db.users.update_one({"_id": user["_id"]}, {"$set": update_fields})
+            user["_id"] = str(user["_id"])
+            user.pop("password_hash", None)
+            user.update(update_fields)
+            return True, "Google Sign-In successful!", user
+
+        # 2. Check if an account already exists with this email address
+        existing_email_user = db.users.find_one({"email": email})
+        if existing_email_user:
+            # Prevent automatic account linking if an existing account uses password authentication
+            if existing_email_user.get("password_hash"):
+                return False, (
+                    "An existing CareerPath.AI account is already registered with this email address using email/password. "
+                    "To protect account security, automatic linking is disabled. Please sign in with your email and password."
+                ), None
+            # If an existing user record matches email and has no password hash, associate google_sub
+            update_fields = {"last_login": now, "google_sub": google_sub, "auth_provider": "google"}
+            if picture and not existing_email_user.get("avatar_url"):
+                update_fields["avatar_url"] = picture
+            db.users.update_one({"_id": existing_email_user["_id"]}, {"$set": update_fields})
+            existing_email_user["_id"] = str(existing_email_user["_id"])
+            existing_email_user.pop("password_hash", None)
+            existing_email_user.update(update_fields)
+            return True, "Google Sign-In successful!", existing_email_user
+
+        # 3. Create new user document for first-time Google user
+        user_doc = {
+            "name": name,
+            "email": email,
+            "google_sub": google_sub,
+            "avatar_url": picture,
+            "auth_provider": "google",
+            "created_at": now,
+            "last_login": now
+        }
+        res = db.users.insert_one(user_doc)
+        user_doc["_id"] = str(res.inserted_id)
+        return True, "Google Account registered successfully!", user_doc
+    except DuplicateKeyError:
+        # Resolve race condition if concurrent request inserted the document
+        try:
+            user = db.users.find_one({"google_sub": google_sub}) if google_sub else db.users.find_one({"email": email})
+            if user:
+                user["_id"] = str(user["_id"])
+                user.pop("password_hash", None)
+                return True, "Google Sign-In successful!", user
+        except Exception:
+            pass
+        return False, "An account with this email address or identity already exists.", None
+    except Exception as e:
+        return False, f"Database error during Google authentication: {str(e)}", None
 
 def save_resume_scan(user_email: str, filename: str, skills: list, strengths: list, suggestions: list, word_count: int, ats_score: int):
     """Saves a resume scan result for a user into MongoDB."""

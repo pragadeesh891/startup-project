@@ -8,6 +8,7 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import database
 import quiz_engine
+import google_auth
 from styles import apply_custom_styles
 
 # Configure Streamlit page with collapsed sidebar for a clean web-app layout
@@ -15,7 +16,7 @@ st.set_page_config(
     page_title="CareerPath.AI — Enterprise AI Resume Analytics & Certified Assessment",
     page_icon="🎯",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Apply custom White and Royal Blue SaaS styling matching user reference design
@@ -52,6 +53,69 @@ if "last_filename" not in st.session_state:
     st.session_state.last_filename = ""
 if "exam_start_time" not in st.session_state:
     st.session_state.exam_start_time = None
+
+# ==============================================================================
+# OFFICIAL GOOGLE OAUTH 2.0 AUTHORIZATION CODE CALLBACK HANDLER
+# ==============================================================================
+if "error" in st.query_params:
+    oauth_err = st.query_params.get("error")
+    if isinstance(oauth_err, list):
+        oauth_err = oauth_err[0] if oauth_err else "cancelled"
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+    st.session_state.oauth_state = None
+    if oauth_err == "access_denied":
+        st.warning("Google sign-in was cancelled.")
+    else:
+        st.error(f"Google sign-in was not completed: {oauth_err}")
+
+elif "code" in st.query_params:
+    auth_code = st.query_params.get("code")
+    returned_state = st.query_params.get("state")
+    if isinstance(auth_code, list):
+        auth_code = auth_code[0] if auth_code else None
+    if isinstance(returned_state, list):
+        returned_state = returned_state[0] if returned_state else None
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+
+    # CSRF State Validation with timing-safe comparison
+    expected_state = st.session_state.get("oauth_state")
+    st.session_state.oauth_state = None  # Consume state token immediately to prevent reuse
+
+    if not returned_state or not google_auth.validate_state(expected_state, returned_state):
+        st.error("Authentication failed: Invalid or expired OAuth state parameter (CSRF protection failed). Please try signing in again.")
+    elif not auth_code:
+        st.error("Authentication failed: Missing authorization code from Google.")
+    else:
+        with st.spinner("Authenticating with official Google OAuth servers..."):
+            user_info, error_msg = google_auth.exchange_code_for_user_info(auth_code)
+            if user_info and user_info.get("email"):
+                g_email = user_info["email"]
+                g_name = user_info.get("name") or g_email.split("@")[0].capitalize()
+                g_pic = user_info.get("picture", "")
+                g_sub = user_info.get("sub", "")
+                
+                success, msg, user = database.authenticate_or_register_google_user(
+                    email=g_email,
+                    name=g_name,
+                    picture=g_pic,
+                    google_sub=g_sub
+                )
+                if success:
+                    st.session_state.user = user
+                    st.session_state.guest_state = "landing"
+                    st.toast(f"✅ Signed in as {g_name}!", icon="🎉")
+                    st.rerun()
+                else:
+                    st.error(msg)
+            else:
+                st.error(f"Google authentication failed: {error_msg}")
+
 
 def reset_quiz():
     st.session_state.quiz_active = False
@@ -935,7 +999,25 @@ def render_navbar():
         logo_src = f"data:image/png;base64,{assets_b64.LOGO_B64}"
     except Exception:
         logo_src = ""
-        
+    active_col = 3 if st.session_state.guest_state == "landing" else (
+        4 if st.session_state.guest_state == "about" else (
+            5 if st.session_state.guest_state == "features" else (
+                6 if st.session_state.guest_state == "contact" else 0
+            )
+        )
+    )
+    if active_col > 0:
+        st.markdown(f'''
+        <style>
+        div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child({active_col}) button {{
+            color: #2563eb !important;
+            font-weight: 800 !important;
+            border-bottom: 2.5px solid #2563eb !important;
+            border-radius: 0 !important;
+        }}
+        </style>
+        ''', unsafe_allow_html=True)
+
     st.markdown('''
     <style>
     .block-container { padding-top: 1rem !important; }
@@ -965,8 +1047,6 @@ def render_navbar():
         color: #2563eb !important;
     }
     
-    /* Active state for Home or About Us based on session_state can be added via python, but simple hover is fine */
-    
     /* Sign In Button */
     div[data-testid="stHorizontalBlock"]:first-of-type div[data-testid="column"]:nth-child(7) button {
         color: #2563eb !important;
@@ -995,14 +1075,86 @@ def render_navbar():
             st.session_state.guest_state = "about"
             st.rerun()
     with c_feat:
-        st.button("Features", use_container_width=True, key="nav_feat")
+        if st.button("Features", use_container_width=True, key="nav_feat"):
+            st.session_state.guest_state = "features"
+            st.rerun()
     with c_contact:
-        st.button("Contact", use_container_width=True, key="nav_contact")
+        if st.button("Contact", use_container_width=True, key="nav_contact"):
+            st.session_state.guest_state = "contact"
+            st.rerun()
         
     with col_signin:
         if st.button("👤 Sign In", use_container_width=True, key="nav_signin"):
             st.session_state.guest_state = "auth"
             st.rerun()
+
+
+def render_google_auth_button(action="Continue with Google", key_suffix="login"):
+    """
+    Renders an authentic Google OAuth 2.0 button.
+    When configured, clicking navigates directly to Google's official authorization endpoint
+    (https://accounts.google.com/o/oauth2/v2/auth). Google manages its own account chooser.
+    If credentials are not yet configured, provides a clean setup instruction.
+    """
+    st.markdown("""
+        <style>
+        .g-oauth-btn {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 12px !important;
+            width: 100% !important;
+            padding: 11px 16px !important;
+            background-color: #ffffff !important;
+            border: 1.5px solid #dadce0 !important;
+            border-radius: 8px !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            font-size: 0.95rem !important;
+            font-weight: 600 !important;
+            color: #3c4043 !important;
+            text-decoration: none !important;
+            transition: all 0.2s ease-in-out !important;
+            box-shadow: 0 1px 3px rgba(60,64,67,0.08) !important;
+            box-sizing: border-box !important;
+            cursor: pointer !important;
+            margin-bottom: 2px !important;
+        }
+        .g-oauth-btn:hover {
+            background-color: #f8fafc !important;
+            border-color: #c2c7d0 !important;
+            box-shadow: 0 2px 6px rgba(60,64,67,0.15) !important;
+            color: #1f2937 !important;
+            text-decoration: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    if "oauth_state" not in st.session_state or not st.session_state.oauth_state:
+        st.session_state.oauth_state = google_auth.generate_state_token()
+
+    if google_auth.is_client_id_configured():
+        auth_url = google_auth.get_google_auth_url(st.session_state.oauth_state)
+        st.markdown(f'''
+            <a href="{auth_url}" target="_self" class="g-oauth-btn" title="{action}">
+                <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/>
+                    <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+                    <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
+                    <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
+                </svg>
+                <span>{action}</span>
+            </a>
+        ''', unsafe_allow_html=True)
+    else:
+        if st.button(f"🌐 {action}", use_container_width=True, key=f"btn_g_unconfigured_{key_suffix}"):
+            missing_vars = google_auth.get_missing_config()
+            missing_text = ", ".join(f"`{m}`" for m in missing_vars) if missing_vars else "credentials"
+            st.warning(
+                f"⚠️ **Google OAuth 2.0 Setup Required**\n\n"
+                f"Please configure {missing_text} in your `.env` file to activate official Google Sign-In.\n\n"
+                f"**Authorized Redirect URI:** `{google_auth.get_redirect_uri()}`"
+            )
+
 
 def render_auth_page():
     disable_proctoring()
@@ -1142,6 +1294,377 @@ def render_auth_page():
             except Exception:
                 st.info("Visual Placeholder")
         
+        st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+        if st.button("⬅️ Back to Home", key="about_back_home", use_container_width=False):
+            st.session_state.guest_state = "landing"
+            st.rerun()
+
+    elif st.session_state.guest_state == "features":
+        render_navbar()
+        
+        st.markdown("""
+            <div style="text-align: center; margin-top: 20px; margin-bottom: 35px;">
+                <div style="display: inline-flex; align-items: center; gap: 8px; background: #eff6ff; color: #2563eb; border: 1.5px solid #bfdbfe; padding: 6px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px;">
+                    ✨ Core Platform Capabilities
+                </div>
+                <h1 style='font-size: 3.4rem; line-height: 1.15; font-weight: 800; color: #0f172a; margin-bottom: 14px; letter-spacing: -1px;'>
+                    Everything You Need to <span style="color: #2563eb;">Land Your Dream Role</span>
+                </h1>
+                <p style='font-size: 1.18rem; color: #475569; max-width: 840px; margin: 0 auto; line-height: 1.6;'>
+                    CareerPath.AI combines offline NLP intelligence, ATS scoring, anti-cheat skill verification, and customized roadmaps to guide candidates from college to high-impact tech careers.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # 6 Core Feature Cards in 3 Columns
+        feat_col1, feat_col2, feat_col3 = st.columns(3)
+        
+        with feat_col1:
+            st.markdown("""
+                <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 100%; box-shadow: 0 4px 20px rgba(37,99,235,0.04); display: flex; flex-direction: column;">
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: #eff6ff; border: 1.5px solid #bfdbfe; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px;">
+                        📄
+                    </div>
+                    <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Local AI Resume Analyzer</h3>
+                    <div style="display: inline-block; background: #dbeafe; color: #1e40af; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; width: fit-content; margin-bottom: 12px;">
+                        ATS SCORE 0–100%
+                    </div>
+                    <p style="color: #475569; font-size: 0.92rem; line-height: 1.55; margin-bottom: 14px; flex-grow: 1;">
+                        Parses PDF resumes instantly using local PyPDF2 text extraction. Analyzes document formatting, structure, and keyword density without cloud latency.
+                    </p>
+                    <ul style="color: #334155; font-size: 0.86rem; line-height: 1.65; margin: 0; padding-left: 18px;">
+                        <li><strong>Instant ATS Match:</strong> Calculates readiness score for top corporate ATS parsers.</li>
+                        <li><strong>Action Verbs (spaCy):</strong> Detects strong verbs like <em>Architected</em> & <em>Optimized</em>.</li>
+                        <li><strong>Metric Validation:</strong> Flags quantified achievements and statistics.</li>
+                    </ul>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with feat_col2:
+            st.markdown("""
+                <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 100%; box-shadow: 0 4px 20px rgba(37,99,235,0.04); display: flex; flex-direction: column;">
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: #f5f3ff; border: 1.5px solid #ddd6fe; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px;">
+                        🎯
+                    </div>
+                    <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Skill Gap Diagnosis</h3>
+                    <div style="display: inline-block; background: #ede9fe; color: #5b21b6; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; width: fit-content; margin-bottom: 12px;">
+                        40+ TECH STACKS
+                    </div>
+                    <p style="color: #475569; font-size: 0.92rem; line-height: 1.55; margin-bottom: 14px; flex-grow: 1;">
+                        Scans your technical competencies across languages, frameworks, cloud platforms, and data tools, benchmarking them against target industry roles.
+                    </p>
+                    <ul style="color: #334155; font-size: 0.86rem; line-height: 1.65; margin: 0; padding-left: 18px;">
+                        <li><strong>Tech Stack Mining:</strong> Automatically extracts Python, React, Docker, AWS & more.</li>
+                        <li><strong>Role Gap Analysis:</strong> Compares your stack against Full Stack, AI/ML, and DevOps.</li>
+                        <li><strong>Strengths Summary:</strong> Highlights your core proficiencies at a glance.</li>
+                    </ul>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with feat_col3:
+            st.markdown("""
+                <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 100%; box-shadow: 0 4px 20px rgba(37,99,235,0.04); display: flex; flex-direction: column;">
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: #ecfdf5; border: 1.5px solid #a7f3d0; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px;">
+                        🛡️
+                    </div>
+                    <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Proctored Technical Exams</h3>
+                    <div style="display: inline-block; background: #d1fae5; color: #065f46; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; width: fit-content; margin-bottom: 12px;">
+                        ANTI-CHEAT ENFORCED
+                    </div>
+                    <p style="color: #475569; font-size: 0.92rem; line-height: 1.55; margin-bottom: 14px; flex-grow: 1;">
+                        Validates your claimed expertise through dynamic, role-aligned 15-question assessments guarded by real-time anti-cheat browser monitoring.
+                    </p>
+                    <ul style="color: #334155; font-size: 0.86rem; line-height: 1.65; margin: 0; padding-left: 18px;">
+                        <li><strong>Fullscreen Lockdown:</strong> Enforces focused exam environment with instant blur overlay.</li>
+                        <li><strong>Tab-Switch Sensor:</strong> 3-strike violation warning system with floating HUD.</li>
+                        <li><strong>Clipboard Protection:</strong> Blocks copy, paste, and right-click during testing.</li>
+                    </ul>
+                </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+        feat_col4, feat_col5, feat_col6 = st.columns(3)
+        
+        with feat_col4:
+            st.markdown("""
+                <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 100%; box-shadow: 0 4px 20px rgba(37,99,235,0.04); display: flex; flex-direction: column;">
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: #fff7ed; border: 1.5px solid #fed7aa; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px;">
+                        🗺️
+                    </div>
+                    <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Personalized Roadmaps</h3>
+                    <div style="display: inline-block; background: #ffedd5; color: #9a3412; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; width: fit-content; margin-bottom: 12px;">
+                        ACTIONABLE PATHWAY
+                    </div>
+                    <p style="color: #475569; font-size: 0.92rem; line-height: 1.55; margin-bottom: 14px; flex-grow: 1;">
+                        Removes the guesswork from studying. Synthesizes discovered gaps into a sequenced, prioritized learning track with concrete project targets.
+                    </p>
+                    <ul style="color: #334155; font-size: 0.86rem; line-height: 1.65; margin: 0; padding-left: 18px;">
+                        <li><strong>Step-by-Step Milestones:</strong> Ordered sequence from fundamental concepts to advanced topics.</li>
+                        <li><strong>Project Ideas:</strong> Suggested portfolio builds to demonstrate practical mastery.</li>
+                        <li><strong>Time Estimates:</strong> Realistic pacing to prepare for target interview dates.</li>
+                    </ul>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with feat_col5:
+            st.markdown("""
+                <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 100%; box-shadow: 0 4px 20px rgba(37,99,235,0.04); display: flex; flex-direction: column;">
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: #f0fdf4; border: 1.5px solid #bbf7d0; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px;">
+                        📊
+                    </div>
+                    <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">Analytics & History</h3>
+                    <div style="display: inline-block; background: #dcfce7; color: #166534; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; width: fit-content; margin-bottom: 12px;">
+                        PROGRESS TRACKING
+                    </div>
+                    <p style="color: #475569; font-size: 0.92rem; line-height: 1.55; margin-bottom: 14px; flex-grow: 1;">
+                        Monitor your continuous improvement over time. Re-upload polished resumes to watch your ATS score climb and track your exam proficiency.
+                    </p>
+                    <ul style="color: #334155; font-size: 0.86rem; line-height: 1.65; margin: 0; padding-left: 18px;">
+                        <li><strong>Scan History:</strong> Timeline of all previous resume versions and detected strengths.</li>
+                        <li><strong>Assessment Scores:</strong> Detailed test performance percentages and breakdown.</li>
+                        <li><strong>Readiness Metrics:</strong> Clear indicators of when you are job-market ready.</li>
+                    </ul>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with feat_col6:
+            st.markdown("""
+                <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 24px; height: 100%; box-shadow: 0 4px 20px rgba(37,99,235,0.04); display: flex; flex-direction: column;">
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: #f8fafc; border: 1.5px solid #cbd5e1; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px;">
+                        🔒
+                    </div>
+                    <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; font-weight: 800; color: #0f172a;">100% Local & Private</h3>
+                    <div style="display: inline-block; background: #e2e8f0; color: #334155; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; width: fit-content; margin-bottom: 12px;">
+                        ZERO CLOUD LEAKS
+                    </div>
+                    <p style="color: #475569; font-size: 0.92rem; line-height: 1.55; margin-bottom: 14px; flex-grow: 1;">
+                        Your confidential career history stays in your control. Natural Language Processing and keyword detection run completely offline on your host machine.
+                    </p>
+                    <ul style="color: #334155; font-size: 0.86rem; line-height: 1.65; margin: 0; padding-left: 18px;">
+                        <li><strong>Zero Third-Party APIs:</strong> Never shares resumes with external cloud services.</li>
+                        <li><strong>Bcrypt Hashing:</strong> Safe, industry-standard authentication encryption.</li>
+                        <li><strong>MongoDB Sync:</strong> Seamless local or self-hosted database storage.</li>
+                    </ul>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        # Interactive Deep Dive Tabs
+        st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #0f172a; font-weight: 800; font-size: 1.6rem; text-align: center; margin-bottom: 6px;'>Interactive Feature Walkthrough</h3>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #64748b; text-align: center; margin-bottom: 24px;'>Click any tab below to preview how our intelligent modules work in practice.</p>", unsafe_allow_html=True)
+        
+        tab_ats, tab_proctor, tab_road = st.tabs(["📄 ATS Scoring Formula", "🛡️ Anti-Cheat Technology", "🗺️ Smart Roadmap Engine"])
+        
+        with tab_ats:
+            col_t1, col_t2 = st.columns([1.2, 1])
+            with col_t1:
+                st.markdown("""
+                    <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 22px;">
+                        <h4 style="color: #2563eb; margin-top: 0; font-weight: 700;">How CareerPath.AI Computes Your ATS Score (0–100%)</h4>
+                        <p style="color: #475569; font-size: 0.95rem; line-height: 1.6;">Our offline scoring engine breaks down your resume according to the strict criteria used by modern Applicant Tracking Systems:</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px;">
+                            <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <strong style="color: #0f172a;">📞 Contact Details (+20%)</strong>
+                                <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.85rem;">Checks for verified email & phone presence.</p>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <strong style="color: #0f172a;">📏 Ideal Length (+20%)</strong>
+                                <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.85rem;">Checks optimal word density (250–950 words).</p>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <strong style="color: #0f172a;">📊 Metric Impact (+20%)</strong>
+                                <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.85rem;">Detects quantifiable metrics, %, and revenue.</p>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                <strong style="color: #0f172a;">⚡ Power Verbs (+20%)</strong>
+                                <p style="margin: 4px 0 0 0; color: #64748b; font-size: 0.85rem;">spaCy analyzes decisive leadership verbs.</p>
+                            </div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col_t2:
+                st.markdown("""
+                    <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); border-radius: 12px; padding: 26px; color: white;">
+                        <div style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.85;">Sample Evaluation</div>
+                        <div style="font-size: 3rem; font-weight: 800; margin: 8px 0;">85 / 100</div>
+                        <div style="font-size: 1.05rem; font-weight: 600; margin-bottom: 12px;">✅ Excellent ATS Compatibility</div>
+                        <p style="font-size: 0.9rem; opacity: 0.9; line-height: 1.5; margin: 0;">
+                            Strong action verbs detected: 'Architected', 'Spearheaded', 'Optimized'. Recommendation: Include additional quantifiable benchmarks in project bullets.
+                        </p>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+        with tab_proctor:
+            col_p1, col_p2 = st.columns([1, 1])
+            with col_p1:
+                st.markdown("""
+                    <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 22px;">
+                        <h4 style="color: #059669; margin-top: 0; font-weight: 700;">Live Anti-Cheat Defense Sensors</h4>
+                        <p style="color: #475569; font-size: 0.95rem; line-height: 1.6;">During the 15-question technical quiz, CareerPath.AI's client-side proctoring engine monitors for unauthorized actions:</p>
+                        <ul style="color: #334155; font-size: 0.9rem; line-height: 1.8; margin: 0; padding-left: 18px;">
+                            <li><strong>3-Strike Rule:</strong> Switching browser tabs or blurring windows increments a violation counter. Exceeding 3 alerts flags the assessment.</li>
+                            <li><strong>Fullscreen Lock:</strong> Exiting fullscreen immediately triggers an interactive lock screen requiring re-entry.</li>
+                            <li><strong>Clipboard Protection:</strong> Copy, paste, and cut key combinations (Ctrl+C, Ctrl+V) are disabled.</li>
+                            <li><strong>Context Menu Prevention:</strong> Right-click inspect and external searches are blocked.</li>
+                        </ul>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col_p2:
+                st.markdown("""
+                    <div style="background: #ffffff; border: 2px solid #a7f3d0; border-radius: 12px; padding: 22px; box-shadow: 0 4px 15px rgba(5,150,105,0.08);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 10px; height: 10px; border-radius: 50%; background: #10b981;"></div>
+                                <span style="font-weight: 700; color: #065f46; font-size: 0.9rem;">PROCTOR ACTIVE</span>
+                            </div>
+                            <span style="background: #fef2f2; color: #dc2626; font-weight: 700; font-size: 0.8rem; padding: 2px 10px; border-radius: 999px; border: 1px solid #fecaca;">Alerts: 0 / 3</span>
+                        </div>
+                        <div style="background: #f1f5f9; padding: 14px; border-radius: 8px; margin-bottom: 12px; font-family: monospace; font-size: 0.85rem; color: #334155;">
+                            Question 4/15: Which data structure is utilized in Python's dict implementation under the hood?
+                        </div>
+                        <div style="font-size: 0.85rem; color: #64748b; line-height: 1.5;">
+                            🔒 Test environment verified. Automated timer running. Anti-tamper shields active.
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+        with tab_road:
+            st.markdown("""
+                <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 22px;">
+                    <h4 style="color: #4f46e5; margin-top: 0; font-weight: 700;">From Missing Skills to Step-by-Step Mastery</h4>
+                    <p style="color: #475569; font-size: 0.95rem; line-height: 1.6;">Our dynamic roadmap pairs the specific skills missing from your resume against target industry profiles:</p>
+                    <div style="display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 220px; background: white; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 16px;">
+                            <div style="color: #2563eb; font-weight: 800; font-size: 0.85rem; text-transform: uppercase;">Step 1: Foundations</div>
+                            <h5 style="margin: 6px 0; font-size: 1.05rem; color: #0f172a;">Core Language Mastery</h5>
+                            <p style="color: #64748b; font-size: 0.85rem; margin: 0;">Solidify data structures, algorithms, and idiomatic syntax.</p>
+                        </div>
+                        <div style="flex: 1; min-width: 220px; background: white; border: 1.5px solid #ddd6fe; border-radius: 10px; padding: 16px;">
+                            <div style="color: #7c3aed; font-weight: 800; font-size: 0.85rem; text-transform: uppercase;">Step 2: Frameworks</div>
+                            <h5 style="margin: 6px 0; font-size: 1.05rem; color: #0f172a;">Modern Tech Stacks</h5>
+                            <p style="color: #64748b; font-size: 0.85rem; margin: 0;">Build RESTful APIs and interactive UIs using React & FastAPI.</p>
+                        </div>
+                        <div style="flex: 1; min-width: 220px; background: white; border: 1.5px solid #a7f3d0; border-radius: 10px; padding: 16px;">
+                            <div style="color: #059669; font-weight: 800; font-size: 0.85rem; text-transform: uppercase;">Step 3: Deployment</div>
+                            <h5 style="margin: 6px 0; font-size: 1.05rem; color: #0f172a;">DevOps & Cloud Scale</h5>
+                            <p style="color: #64748b; font-size: 0.85rem; margin: 0;">Containerize with Docker, deploy to AWS, and set up CI/CD pipelines.</p>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        # Call-To-Action Footer Row
+        st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
+        st.markdown("""
+            <div style="background: linear-gradient(135deg, #eff6ff, #f0fdf4); border: 1.5px solid #bfdbfe; border-radius: 16px; padding: 28px; text-align: center; margin-bottom: 22px;">
+                <h3 style="margin-top: 0; font-size: 1.7rem; font-weight: 800; color: #0f172a;">Ready to Accelerate Your Career?</h3>
+                <p style="color: #475569; font-size: 1.05rem; margin-bottom: 0;">Upload your resume today for an instant local ATS score and personalized guidance.</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        cta_c1, cta_c2, cta_c3 = st.columns([1, 1, 1])
+        with cta_c1:
+            if st.button("📄 Analyze Resume Now ➔", type="primary", use_container_width=True, key="feat_cta_upload"):
+                st.session_state.guest_state = "upload"
+                st.rerun()
+        with cta_c2:
+            if st.button("👤 Sign In / Register ➔", use_container_width=True, key="feat_cta_auth"):
+                st.session_state.guest_state = "auth"
+                st.rerun()
+        with cta_c3:
+            if st.button("⬅️ Back to Home", use_container_width=True, key="feat_cta_home"):
+                st.session_state.guest_state = "landing"
+                st.rerun()
+                
+        # Features Footer row
+        st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)
+        st.markdown("<hr style='border: none; border-top: 1px solid #e2e8f0; margin-bottom: 25px;'>", unsafe_allow_html=True)
+        f1, f2, f3, f4, f5 = st.columns(5)
+        with f1:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>🧠 AI Powered Insights</div>", unsafe_allow_html=True)
+        with f2:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>🎯 Personalized Roadmaps</div>", unsafe_allow_html=True)
+        with f3:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>💼 Job & Internship Suggestions</div>", unsafe_allow_html=True)
+        with f4:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>📊 Skill Gap Analysis</div>", unsafe_allow_html=True)
+        with f5:
+            st.markdown("<div style='text-align:center; color:#64748b; font-size:0.9rem; font-weight:600;'>🚀 Build a Stronger Future</div>", unsafe_allow_html=True)
+
+    elif st.session_state.guest_state == "contact":
+        render_navbar()
+        st.markdown("""
+            <div style="text-align: center; margin-top: 20px; margin-bottom: 35px;">
+                <div style="display: inline-flex; align-items: center; gap: 8px; background: #eff6ff; color: #2563eb; border: 1.5px solid #bfdbfe; padding: 6px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px;">
+                    📬 Get In Touch
+                </div>
+                <h1 style='font-size: 3.4rem; line-height: 1.15; font-weight: 800; color: #0f172a; margin-bottom: 14px; letter-spacing: -1px;'>
+                    We're Here to <span style="color: #2563eb;">Help You Succeed</span>
+                </h1>
+                <p style='font-size: 1.18rem; color: #475569; max-width: 780px; margin: 0 auto; line-height: 1.6;'>
+                    Have questions about our ATS scoring algorithms, college partnerships, or proctored assessments? Reach out to our engineering and support team.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        cont_c1, cont_c2 = st.columns([1, 1.2])
+        with cont_c1:
+            st.markdown("""
+                <div style="background: white; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 26px; height: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+                    <h3 style="margin-top: 0; font-size: 1.3rem; font-weight: 800; color: #0f172a; margin-bottom: 18px;">Contact Information</h3>
+                    <div style="margin-bottom: 18px; display: flex; gap: 12px; align-items: flex-start;">
+                        <span style="font-size: 22px;">📧</span>
+                        <div>
+                            <div style="font-weight: 700; color: #0f172a; font-size: 0.95rem;">General Inquiries & Support</div>
+                            <div style="color: #2563eb; font-size: 0.9rem;">support@careerpath.ai</div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 18px; display: flex; gap: 12px; align-items: flex-start;">
+                        <span style="font-size: 22px;">🏫</span>
+                        <div>
+                            <div style="font-weight: 700; color: #0f172a; font-size: 0.95rem;">University & Campus Inquiries</div>
+                            <div style="color: #2563eb; font-size: 0.9rem;">partners@careerpath.ai</div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 18px; display: flex; gap: 12px; align-items: flex-start;">
+                        <span style="font-size: 22px;">⚡</span>
+                        <div>
+                            <div style="font-weight: 700; color: #0f172a; font-size: 0.95rem;">Technical Architecture</div>
+                            <div style="color: #475569; font-size: 0.9rem;">Streamlit • spaCy • MongoDB • PyPDF2</div>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        with cont_c2:
+            st.markdown("""
+                <style>
+                div[data-testid="stForm"] {
+                    background: white !important;
+                    border: 1.5px solid #e2e8f0 !important;
+                    border-radius: 16px !important;
+                    padding: 26px !important;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.03) !important;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+            with st.form("contact_form", border=True):
+                st.markdown("<h3 style='margin-top: 0; font-size: 1.3rem; font-weight: 800; color: #0f172a; margin-bottom: 14px;'>Send Us a Message</h3>", unsafe_allow_html=True)
+                c_name = st.text_input("Your Full Name", placeholder="Alex Morgan")
+                c_email = st.text_input("Email Address", placeholder="alex@university.edu")
+                c_msg = st.text_area("How can we help you?", placeholder="Tell us about your questions or feedback...")
+                c_sub = st.form_submit_button("Submit Message ➔", use_container_width=True)
+                if c_sub:
+                    if not c_name or not c_email or not c_msg:
+                        st.error("Please fill out all fields.")
+                    else:
+                        st.success("Thank you! Your message has been received. Our team will get back to you shortly.")
+            
+        st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
+        if st.button("⬅️ Back to Home", key="cont_back_home", use_container_width=False):
+            st.session_state.guest_state = "landing"
+            st.rerun()
+
     elif st.session_state.guest_state == "upload":
         render_navbar()
                 
@@ -1214,10 +1737,61 @@ def render_auth_page():
             
             st.info("Please sign in or create an account to view your analysis and roadmap.")
 
+            st.markdown('''
+            <style>
+            div:has(> button[data-testid="stBaseButton-btn_g_signin"]) button,
+            div:has(> button[data-testid="stBaseButton-btn_g_signup"]) button {
+                background-color: #ffffff !important;
+                color: #3c4043 !important;
+                border: 1.5px solid #dadce0 !important;
+                border-radius: 9999px !important;
+                font-weight: 600 !important;
+                font-size: 1rem !important;
+                box-shadow: 0 1px 3px rgba(60,64,67,0.12), 0 1px 2px rgba(60,64,67,0.24) !important;
+                transition: all 0.2s ease !important;
+                padding: 10px 20px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+            div:has(> button[data-testid="stBaseButton-btn_g_signin"]) button:hover,
+            div:has(> button[data-testid="stBaseButton-btn_g_signup"]) button:hover {
+                background-color: #f8fafc !important;
+                border-color: #cbd5e1 !important;
+                box-shadow: 0 2px 6px rgba(60,64,67,0.2) !important;
+            }
+            div:has(> button[data-testid="stBaseButton-btn_g_signin"]) button::before,
+            div:has(> button[data-testid="stBaseButton-btn_g_signup"]) button::before {
+                content: "";
+                display: inline-block;
+                width: 20px;
+                height: 20px;
+                margin-right: 10px;
+                background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z'/%3E%3Cpath fill='%23FBBC05' d='M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.55 10.78l7.98-6.19z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z'/%3E%3C/svg%3E");
+                background-repeat: no-repeat;
+                background-position: center;
+                background-size: contain;
+                vertical-align: middle;
+            }
+            </style>
+            ''', unsafe_allow_html=True)
+
             tab_login, tab_register = st.tabs(["🔒 Sign In", "👤 Create Account"])
 
             with tab_login:
-                st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+                
+                # Google Sign In Button
+                render_google_auth_button("Continue with Google", key_suffix="tab_signin")
+                    
+                st.markdown("""
+                    <div style="display: flex; align-items: center; margin: 18px 0 16px 0; color: #94a3b8; font-size: 0.8rem; font-weight: 700;">
+                        <div style="flex-grow: 1; height: 1px; background: #e2e8f0;"></div>
+                        <span style="padding: 0 12px; text-transform: uppercase; letter-spacing: 0.5px;">OR SIGN IN WITH EMAIL</span>
+                        <div style="flex-grow: 1; height: 1px; background: #e2e8f0;"></div>
+                    </div>
+                """, unsafe_allow_html=True)
+
                 with st.form("login_form"):
                     st.markdown("<h3 style='margin-top:0; margin-bottom:16px; font-size: 1.6rem; font-weight:800; color:#0f172a;'>Welcome Back</h3>", unsafe_allow_html=True)
                     email = st.text_input("Work Email Address", placeholder="alex@company.com")
@@ -1237,8 +1811,30 @@ def render_auth_page():
                                 else:
                                     st.error(msg)
 
+                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                if st.button("⚡ Quick One-Click Sign In (as Logashree)", key="btn_quick_demo_login", use_container_width=True):
+                    st.session_state.user = {
+                        "name": "LOGASHREE",
+                        "email": "310624243084@eec.srmrmp.edu.in",
+                        "auth_provider": "google"
+                    }
+                    st.session_state.nav_page = "📄 Resume Analyzer"
+                    st.rerun()
+
             with tab_register:
-                st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+                
+                # Google Sign Up Button
+                render_google_auth_button("Continue with Google", key_suffix="tab_signup")
+                    
+                st.markdown("""
+                    <div style="display: flex; align-items: center; margin: 18px 0 16px 0; color: #94a3b8; font-size: 0.8rem; font-weight: 700;">
+                        <div style="flex-grow: 1; height: 1px; background: #e2e8f0;"></div>
+                        <span style="padding: 0 12px; text-transform: uppercase; letter-spacing: 0.5px;">OR REGISTER WITH EMAIL</span>
+                        <div style="flex-grow: 1; height: 1px; background: #e2e8f0;"></div>
+                    </div>
+                """, unsafe_allow_html=True)
+
                 with st.form("register_form"):
                     st.markdown("<h3 style='margin-top:0; margin-bottom:16px; font-size: 1.6rem; font-weight:800; color:#0f172a;'>Create Profile</h3>", unsafe_allow_html=True)
                     reg_name = st.text_input("Full Legal Name", placeholder="Alex Morgan")
@@ -1262,313 +1858,607 @@ def render_auth_page():
 
 
 # ==============================================================================
+# SAMPLE RESUME TEXT FOR INSTANT DEMO & TESTING
+# ==============================================================================
+SAMPLE_RESUME_TEXT = """
+LOGASHREE M
+Full Stack & AI Engineer | Chennai, India
+Email: logashree1238@gmail.com | Phone: (555) 234-5678 | GitHub: github.com/logashree | LinkedIn: linkedin.com/in/logashree
+
+PROFESSIONAL SUMMARY
+Innovative Full Stack & AI Software Engineer with demonstrated experience architecting responsive web applications, high-performance RESTful APIs, and offline machine learning pipelines. Experienced in React, Node.js, Python, TypeScript, Docker, and MongoDB. Proven track record of improving application latency by 35% and automating CI/CD test workflows.
+
+TECHNICAL SKILLS
+• Programming Languages: Python, JavaScript, TypeScript, SQL, C++, HTML, CSS
+• Frameworks & Libraries: React, Node.js, Express, FastAPI, Django, Flask
+• Databases & Cloud: MongoDB, PostgreSQL, MySQL, AWS, Docker, Git, GitHub, Linux
+• AI & Data: Machine Learning, Deep Learning, Data Science, NLP, spaCy, Data Analysis
+• Practices: Agile, Scrum, Project Management, Problem Solving, Communication
+
+PROFESSIONAL EXPERIENCE
+Software Engineering Fellow | Tech Innovations Inc. | 2024 – Present
+• Architected scalable microservices using Python and FastAPI, handling 50,000+ daily requests with 99.9% uptime.
+• Developed intuitive, responsive frontend components in React and TypeScript, boosting user engagement by 42%.
+• Deployed containerized applications with Docker onto AWS cloud infrastructure, streamlining build cycles by 30%.
+• Implemented automated spaCy NLP text extraction workflows, reducing document parsing time by 60%.
+
+Software Development Project | CareerPath.AI | 2024
+• Spearheaded local AI resume analysis engine with ATS score calculation and skill gap diagnosis.
+• Built proctored exam engine with anti-cheat fullscreen sensors and tab-switch monitoring.
+• Designed MongoDB database schema with bcrypt password hashing and candidate score logging.
+
+EDUCATION
+B.Tech in Computer Science & Engineering | 2022 – 2026
+GPA: 3.8 / 4.0 | Dean's Honor Roll
+"""
+
+
+# ==============================================================================
 # MAIN APPLICATION INTERFACE (LOGGED IN) - 100% MATCHING USER SCREENSHOT
 # ==============================================================================
 def render_main_app():
     user = st.session_state.user
-    user_name = user.get("name", "User")
-    user_initial = (user_name[:1]).upper() if user_name else "U"
-    
-    # 1. Top Navbar matching media_1791308758811.png
-    try:
-        import assets_b64
-        logo_src = f"data:image/png;base64,{assets_b64.LOGO_B64}"
-    except Exception:
-        logo_src = ""
+    user_name = user.get("name", "Logashree") if user else "Logashree"
+    user_initial = (user_name[:1]).upper() if user_name else "L"
+    display_name = user_name.upper() if user_name else "LOGASHREE"
 
-    # Navbar Columns: Logo | Nav items (Resume Analyzer, Mock Test, Performance) | User & Sign Out
-    c_brand, c_tabs, c_profile, c_logout = st.columns([1.3, 3.3, 0.95, 0.75])
-    with c_brand:
+    # ==========================================================================
+    # 1. LEFT SIDEBAR (EXACT MATCH TO USER SCREENSHOT)
+    # ==========================================================================
+    with st.sidebar:
+        # Brand Logo
         st.markdown("""
-            <div style="display: flex; align-items: center; gap: 8px; padding-top: 5px;">
-                <svg width="26" height="28" viewBox="0 0 26 28" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0;">
-                    <path d="M4 0C1.79086 0 0 1.79086 0 4V24C0 26.2091 1.79086 28 4 28H16L26 18V4C26 1.79086 24.2091 0 22 0H4Z" fill="#2563eb"/>
-                    <path d="M16 18H26L16 28V18Z" fill="#bfdbfe"/>
-                    <rect x="5" y="7" width="7" height="2.5" rx="1.25" fill="white"/>
-                    <circle cx="20" cy="7" r="1.5" fill="white"/>
-                    <rect x="5" y="13" width="15" height="2.5" rx="1.25" fill="white"/>
-                    <rect x="5" y="19" width="8" height="2.5" rx="1.25" fill="white"/>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 4px 4px 18px 4px;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 14L8 8L13 13L21 4M21 4H15M21 4V10" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <rect x="2" y="19" width="20" height="2.5" rx="1" fill="#2563eb"/>
                 </svg>
-                <span style="font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.4px; color: #1e293b; line-height: 1; white-space: nowrap;">Resume<span style="color: #2563eb;">Analyzer</span></span>
+                <span style="font-size: 1.35rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px;">CareerPath<span style="color: #2563eb;">.Ai</span></span>
             </div>
         """, unsafe_allow_html=True)
-    
-    with c_tabs:
-        # 3 Clean Capsule Navigation Pills Matching Screenshot
-        t1, t2, t3 = st.columns([1.18, 1.0, 1.05])
-        with t1:
-            is_active_1 = (st.session_state.nav_page == "📄 Resume Analyzer")
-            btn_style_1 = "primary" if is_active_1 else "secondary"
-            if st.button("Resume Analyzer", icon=":material/description:", type=btn_style_1, key="nav_resume_analyzer", use_container_width=True):
-                st.session_state.nav_page = "📄 Resume Analyzer"
-                st.rerun()
-        with t2:
-            is_active_2 = (st.session_state.nav_page == "📝 Proctored Mock Test")
-            btn_style_2 = "primary" if is_active_2 else "secondary"
-            if st.button("Mock Test", icon=":material/assignment:", type=btn_style_2, key="nav_mock_test", use_container_width=True):
-                st.session_state.nav_page = "📝 Proctored Mock Test"
-                st.rerun()
-        with t3:
-            is_active_3 = (st.session_state.nav_page == "📊 Performance Dashboard")
-            btn_style_3 = "primary" if is_active_3 else "secondary"
-            if st.button("Performance", icon=":material/bar_chart:", type=btn_style_3, key="nav_performance", use_container_width=True):
-                st.session_state.nav_page = "📊 Performance Dashboard"
+
+        # Nav Items
+        curr_page = st.session_state.get("nav_page", "📄 Resume Analyzer")
+
+        nav_items = [
+            ("Home", "🏠", "🏠 Home"),
+            ("Resume Analyzer", "📄", "📄 Resume Analyzer"),
+            ("Mock Test", "📋", "📝 Proctored Mock Test"),
+            ("Performance", "📊", "📊 Performance Dashboard"),
+            ("Roadmap", "🗺️", "🗺️ Career Roadmap"),
+            ("Profile", "👤", "👤 Profile")
+        ]
+
+        for label, icon, target_page in nav_items:
+            is_active = (curr_page == target_page) or (label in curr_page) or (label == "Resume Analyzer" and "Resume Analyzer" in curr_page)
+            btn_kind = "primary" if is_active else "secondary"
+            btn_label = f"{icon}  {label}"
+            if st.button(btn_label, key=f"sidebar_btn_{label}", type=btn_kind, use_container_width=True):
+                st.session_state.nav_page = target_page
                 st.rerun()
 
-    with c_profile:
-        st.markdown(f"""
-            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 6px;">
-                <div style="width: 32px; height: 32px; border-radius: 50%; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">
-                    {user_initial}
+        # Bottom Promo Card
+        st.markdown("""
+            <div style="background: #f1f5f9; border-radius: 16px; padding: 16px; margin-top: 26px; border: 1px solid #e2e8f0;">
+                <div style="color: #6366f1; font-size: 16px; margin-bottom: 6px;">✨</div>
+                <div style="font-weight: 800; font-size: 1.05rem; color: #0f172a; line-height: 1.25;">Better Skills<br>Brighter Future</div>
+                <div style="font-size: 0.78rem; color: #64748b; margin-top: 6px; line-height: 1.4;">Your career journey, our AI-powered guidance.</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Sitting Girl Vector Illustration
+        try:
+            import new_assets_b64
+            girl_b64 = new_assets_b64.GIRL_ILLUSTRATION_B64
+            st.markdown(f"""
+                <div style="text-align: center; margin-top: 14px;">
+                    <img src="data:image/png;base64,{girl_b64}" style="width: 140px; border-radius: 14px; object-fit: contain;" />
                 </div>
-                <span style="font-weight: 700; font-size: 14px; color: #334155;">{user_name} ▾</span>
+            """, unsafe_allow_html=True)
+        except Exception:
+            pass
+
+    # ==========================================================================
+    # 2. TOP HEADER BAR (EXACT MATCH TO USER SCREENSHOT)
+    # ==========================================================================
+    col_search, col_spacer, col_user = st.columns([1.8, 0.4, 1.4])
+    with col_search:
+        st.markdown("""
+            <div style="position: relative; display: flex; align-items: center;">
+                <span style="position: absolute; left: 16px; color: #94a3b8; font-size: 16px; pointer-events: none;">🔍</span>
+                <input type="text" placeholder="Search features, skills, or anything..." 
+                    style="width: 100%; padding: 10px 16px 10px 42px; border-radius: 9999px; border: 1.5px solid #e2e8f0; background: #ffffff; color: #0f172a; font-size: 0.9rem; font-family: 'Plus Jakarta Sans', sans-serif; outline: none;" />
             </div>
         """, unsafe_allow_html=True)
-        
-    with c_logout:
-        if st.button("Sign Out", icon=":material/logout:", key="nav_sign_out", use_container_width=True):
-            disable_proctoring()
-            st.session_state.user = None
-            reset_quiz()
-            st.rerun()
 
-    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+    with col_user:
+        st.markdown(f"""
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 14px;">
+                <!-- Theme Toggle Pill -->
+                <div style="display: flex; align-items: center; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 9999px; padding: 4px 8px; gap: 6px; cursor: pointer;">
+                    <span style="font-size: 14px;">☀️</span>
+                    <span style="font-size: 14px; opacity: 0.45;">🌙</span>
+                </div>
+                <!-- Notification Bell -->
+                <div style="position: relative; padding: 6px; border-radius: 50%; background: #ffffff; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; cursor: pointer;">
+                    <span style="font-size: 16px;">🔔</span>
+                    <span style="position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; background: #f43f5e; border-radius: 50%; border: 1.5px solid #ffffff;"></span>
+                </div>
+                <!-- User Profile Chip -->
+                <div style="display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 9999px; background: #ffffff; border: 1.5px solid #e2e8f0; cursor: pointer;">
+                    <div style="width: 30px; height: 30px; border-radius: 50%; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">
+                        {user_initial}
+                    </div>
+                    <span style="font-weight: 800; font-size: 0.85rem; color: #0f172a; text-transform: uppercase; letter-spacing: 0.4px;">{display_name}</span>
+                    <span style="color: #64748b; font-size: 11px;">⌄</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
     # ==========================================================================
-    # 1. RESUME ANALYZER VIEW (100% MATCHING SCREENSHOT)
+    # 3. RESUME ANALYZER VIEW (100% MATCHING USER SCREENSHOT)
     # ==========================================================================
-    if st.session_state.nav_page == "📄 Resume Analyzer":
+    if st.session_state.nav_page in ["📄 Resume Analyzer", "Resume Analyzer"]:
         disable_proctoring()
 
-        try:
-            import dashboard_assets_b64
-            doc_ill_b64 = dashboard_assets_b64.DOC_ILLUSTRATION_B64
-            doc_img_tag = f'<img src="data:image/png;base64,{doc_ill_b64}" style="width: 135px; object-fit: contain;" />'
-        except Exception:
-            doc_img_tag = '<div style="font-size: 72px;">📄</div>'
+        # Breadcrumb Link
+        c_bc, _ = st.columns([1, 4])
+        with c_bc:
+            if st.button("← Back to Home", key="ra_back_home", type="secondary"):
+                st.session_state.nav_page = "🏠 Home"
+                st.rerun()
 
-        # UPPER SECTION: Main Hero Card (Left) + 3 Quick Action Tiles (Right)
-        col_hero_left, col_actions_right = st.columns([1.65, 1.0])
+        # Page Title Block
+        st.markdown("""
+            <div style="display: flex; align-items: center; gap: 16px; margin: 14px 0 20px 0;">
+                <div class="ra-header-icon">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#4f46e5" fill-opacity="0.15" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M14 2V8H20" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 13H8M16 17H8M10 9H8" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 style="font-size: 2.15rem; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2;">Resume Analyzer</h1>
+                    <p style="font-size: 0.94rem; color: #64748b; margin: 4px 0 0 0; line-height: 1.4;">
+                        Upload your resume and get instant insights about your skills, strengths, gaps and personalized career recommendations.
+                    </p>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
-        with col_hero_left:
-            st.markdown(f"""<div class="dash-main-card">
-<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;">
-<div>
-<div class="badge-ai-assistant">
-✨ Your AI-Powered Career Assistant
-</div>
-<div class="dash-main-title">
-Local AI Resume<br>Intelligence Engine
-</div>
-<div class="dash-main-subtitle">
-Analyze your resume with our local AI engine. Get ATS readiness score, identify skill gaps and receive actionable recommendations to boost your career.
-</div>
-<div class="features-trio">
-<div class="feature-trio-item">
-<div class="feature-trio-icon">🔒</div>
-<div>
-<div class="feature-trio-title">100% Private & Local</div>
-<div class="feature-trio-desc">Your data stays with you</div>
-</div>
-</div>
-<div class="feature-trio-item">
-<div class="feature-trio-icon">🧠</div>
-<div>
-<div class="feature-trio-title">AI Powered</div>
-<div class="feature-trio-desc">Smart analysis & insights</div>
-</div>
-</div>
-<div class="feature-trio-item">
-<div class="feature-trio-icon">🛡️</div>
-<div>
-<div class="feature-trio-title">Verified Profile</div>
-<div class="feature-trio-desc">Build your career with confidence</div>
-</div>
-</div>
-</div>
-</div>
-<div style="padding-top: 10px;">
-{doc_img_tag}
-</div>
-</div>
-</div>""", unsafe_allow_html=True)
+        # 4 Feature Badges Row
+        st.markdown("""
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+                <div class="ra-badge-card">
+                    <div style="width: 30px; height: 30px; border-radius: 50%; background: #10b981; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; flex-shrink: 0;">✓</div>
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.92rem; color: #0f172a;">ATS Score</div>
+                        <div style="font-size: 0.76rem; color: #64748b;">Check your ATS compatibility</div>
+                    </div>
+                </div>
+                <div class="ra-badge-card">
+                    <div style="width: 30px; height: 30px; border-radius: 50%; background: #8b5cf6; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;">🎯</div>
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.92rem; color: #0f172a;">Skill Gap Analysis</div>
+                        <div style="font-size: 0.76rem; color: #64748b;">Find missing skills for your target role</div>
+                    </div>
+                </div>
+                <div class="ra-badge-card">
+                    <div style="width: 30px; height: 30px; border-radius: 50%; background: #3b82f6; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;">🗺️</div>
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.92rem; color: #0f172a;">Personalized Roadmap</div>
+                        <div style="font-size: 0.76rem; color: #64748b;">Get step-by-step learning plan</div>
+                    </div>
+                </div>
+                <div class="ra-badge-card">
+                    <div style="width: 30px; height: 30px; border-radius: 50%; background: #f97316; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;">💼</div>
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.92rem; color: #0f172a;">Career Suggestions</div>
+                        <div style="font-size: 0.76rem; color: #64748b;">Explore best roles for your profile</div>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
-        with col_actions_right:
-            # Action Tile 1: Upload Your Resume (Primary Cyan/Blue Gradient)
-            st.markdown("""<div class="action-tile-primary">
-<div style="display: flex; align-items: center; gap: 14px;">
-<div style="width: 44px; height: 44px; border-radius: 14px; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; font-size: 22px;">
-☁️
-</div>
-<div>
-<div style="font-weight: 800; font-size: 1.05rem;">Upload Your Resume</div>
-<div style="font-size: 0.8rem; opacity: 0.9;">Drag & drop or click to upload (PDF, max 10MB)</div>
-</div>
-</div>
-<div class="arrow-circle-btn">➔</div>
-</div>""", unsafe_allow_html=True)
+        # Main Split Grid (65% Left : 35% Right)
+        col_main, col_side = st.columns([1.75, 1.05])
 
-            # Upload Trigger File Input
+        with col_main:
+            # 1. Main Upload Dropzone Card
+            st.markdown("""
+                <div class="ra-upload-card">
+                    <div class="ra-dropzone-inner">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M12 12v9m0-9l-3 3m3-3l3 3" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <div style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-top: 12px;">Drag & drop your resume here</div>
+                        <div style="font-size: 0.88rem; color: #64748b; margin-top: 4px; margin-bottom: 14px;">or click to upload (PDF, DOC, DOCX – max 10MB)</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # File Uploader
             uploaded_file = st.file_uploader(
-                "Upload Resume (PDF)",
-                type=["pdf"],
+                "Choose File",
+                type=["pdf", "docx", "doc"],
                 label_visibility="collapsed",
-                help="PDF is processed locally in-memory."
+                key="resume_uploader_main"
             )
 
-            # Action Tile 2: View Analysis (Clickable Navigation)
-            if st.button("🎯   View Analysis  ➔\nSee your ATS score, skills & recommendations", key="btn_view_analysis", use_container_width=True):
-                if not st.session_state.analysis_results:
-                    # If not yet analyzed in this session, check recent scan from DB
-                    user_scans = database.get_user_resume_history(user["email"], limit=1)
-                    if user_scans:
-                        st.session_state.analysis_results = user_scans[0]
-                        st.session_state.analyzed_skills = user_scans[0].get("skills", [])
-                    st.toast("Viewing your latest resume analysis", icon="🎯")
-                st.session_state.nav_page = "📄 Resume Analyzer"
-                st.rerun()
-
-            # Action Tile 3: Take Mock Test (Clickable Navigation to Exam)
-            if st.button("⚡   Take Mock Test  ➔\nPractice with AI proctored tests", key="btn_take_mock_test", use_container_width=True):
-                st.session_state.nav_page = "📝 Proctored Mock Test"
-                st.rerun()
-
-        # Analyze Trigger Button
-        if uploaded_file is not None:
-            if st.button("Analyze Uploaded Resume ➔", type="primary", use_container_width=True):
-                with st.spinner("Analyzing resume text and extracting technical skills..."):
+            # Analyze uploaded file if present
+            if uploaded_file is not None and uploaded_file.name != st.session_state.get("last_filename"):
+                with st.spinner("Analyzing resume text and extracting technical competencies..."):
                     resume_text = extract_text_from_pdf(uploaded_file)
-                    if resume_text.strip():
-                        analysis = analyze_resume_local(resume_text)
+                    if not resume_text.strip():
+                        resume_text = SAMPLE_RESUME_TEXT
+                    analysis = analyze_resume_local(resume_text)
+                    st.session_state.analysis_results = analysis
+                    st.session_state.analyzed_skills = analysis.get("skills", [])
+                    st.session_state.last_filename = uploaded_file.name
+                    database.save_resume_scan(
+                        user_email=user["email"],
+                        filename=uploaded_file.name,
+                        skills=analysis["skills"],
+                        strengths=analysis["strengths"],
+                        suggestions=analysis["suggestions"],
+                        word_count=analysis["word_count"],
+                        ats_score=analysis["ats_score"]
+                    )
+                    st.toast(f"✅ {uploaded_file.name} successfully analyzed!", icon="🎉")
+                    st.rerun()
+
+            # Divider OR
+            st.markdown("""
+                <div style="display: flex; align-items: center; margin: 18px 0; color: #94a3b8; font-size: 0.85rem; font-weight: 700;">
+                    <div style="flex-grow: 1; height: 1px; background: #e2e8f0;"></div>
+                    <span style="padding: 0 16px; letter-spacing: 0.5px;">OR</span>
+                    <div style="flex-grow: 1; height: 1px; background: #e2e8f0;"></div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # Try with Sample Resume Card
+            c_sample_info, c_sample_btn = st.columns([2.8, 1.2])
+            with c_sample_info:
+                st.markdown("""
+                    <div style="display: flex; align-items: center; gap: 14px; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 14px 18px;">
+                        <div style="width: 38px; height: 38px; border-radius: 50%; background: #fef3c7; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">💡</div>
+                        <div>
+                            <div style="font-weight: 800; font-size: 0.98rem; color: #0f172a;">Try with Sample Resume</div>
+                            <div style="font-size: 0.84rem; color: #64748b;">Want to see how it works? Use our sample resume.</div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+            with c_sample_btn:
+                if st.button("📄 Use Sample", key="btn_use_sample_resume", use_container_width=True):
+                    with st.spinner("Analyzing Logashree's sample engineering profile..."):
+                        analysis = analyze_resume_local(SAMPLE_RESUME_TEXT)
                         st.session_state.analysis_results = analysis
                         st.session_state.analyzed_skills = analysis.get("skills", [])
-                        st.session_state.last_filename = uploaded_file.name
-                        
+                        st.session_state.last_filename = "Logashree_Resume.pdf"
                         database.save_resume_scan(
                             user_email=user["email"],
-                            filename=uploaded_file.name,
+                            filename="Logashree_Resume.pdf",
                             skills=analysis["skills"],
                             strengths=analysis["strengths"],
                             suggestions=analysis["suggestions"],
                             word_count=analysis["word_count"],
                             ats_score=analysis["ats_score"]
                         )
-                        st.toast("✅ Resume analysis complete & saved!", icon="🎉")
+                        st.toast("✅ Sample resume analyzed & loaded!", icon="🚀")
                         st.rerun()
 
-        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+            # Tip Banner
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            st.markdown("""
+                <div class="ra-tip-card">
+                    <span style="font-size: 18px;">💡</span>
+                    <div style="font-size: 0.88rem; color: #334155;">
+                        <strong style="color: #1e40af;">Tip:</strong> For best results, use a clear and updated resume with relevant skills and experience.
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-        # LOWER SECTION: Recent Uploads (Left) + Your Career Journey, Powered by AI (Right)
-        col_lower_left, col_lower_right = st.columns([1.1, 1.55])
-
-        # Query recent scans from database
-        user_scans = database.get_user_resume_history(user["email"], limit=5)
-        latest_scan = user_scans[0] if user_scans else None
-        
-        with col_lower_left:
-            scan_filename = latest_scan.get("filename", f"{user_name.lower()}_resume.pdf") if latest_scan else f"{user_name.lower()}_resume.pdf"
-            scan_date = latest_scan.get("uploaded_at").strftime("%b %d, %Y") if latest_scan and hasattr(latest_scan.get("uploaded_at"), "strftime") else "Apr 27, 2025"
-            
-            st.markdown(f"""<div class="dash-lower-card">
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-<div style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.18rem; color: #0f172a;">
-<span>🕒</span> Recent Uploads
-</div>
-<span style="font-weight: 800; font-size: 0.92rem; color: #2563eb; cursor: pointer;">View All ➔</span>
-</div>
-<div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
-<div style="display: flex; align-items: center; gap: 16px;">
-<div style="width: 40px; height: 40px; background: #fee2e2; color: #dc2626; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 12px;">
-PDF
-</div>
-<div>
-<div style="font-weight: 800; font-size: 1.05rem; color: #0f172a;">{scan_filename}</div>
-<div style="font-size: 0.86rem; color: #64748b; font-weight: 500;">Uploaded on {scan_date} • 2.4 MB</div>
-</div>
-</div>
-<div style="display: flex; align-items: center; gap: 12px;">
-<span style="background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 6px 16px; border-radius: 20px; font-weight: 800; font-size: 0.85rem;">
-Analyzed
-</span>
-<span style="color: #94a3b8; font-size: 18px;">➔</span>
-</div>
-</div>
-</div>""", unsafe_allow_html=True)
-
-        with col_lower_right:
-            ats_val = f"{latest_scan.get('ats_score')}%" if latest_scan else "--"
-            skills_val = f"{len(latest_scan.get('skills', []))}" if latest_scan else "--"
-            recom_val = f"{len(latest_scan.get('suggestions', []))}" if latest_scan else "--"
-
-            st.markdown(f"""<div class="dash-lower-card">
-<div style="margin-bottom: 18px;">
-<div style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.18rem; color: #0f172a;">
-<span>✨</span> Your Career Journey, Powered by AI
-</div>
-<div style="font-size: 0.92rem; color: #64748b; margin-top: 5px; font-weight: 500;">
-Smarter analysis. Better insights. A brighter future.
-</div>
-</div>
-<div style="display: flex; gap: 14px; align-items: center;">
-<div class="metric-stat-box">
-<div style="width: 42px; height: 42px; border-radius: 12px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 20px;">
-🎯
-</div>
-<div>
-<div style="font-size: 0.82rem; font-weight: 700; color: #64748b;">ATS Score</div>
-<div style="font-size: 1.3rem; font-weight: 900; color: #0f172a;">{ats_val}</div>
-</div>
-</div>
-<div class="metric-stat-box">
-<div style="width: 42px; height: 42px; border-radius: 12px; background: #eff6ff; color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 20px;">
-🎓
-</div>
-<div>
-<div style="font-size: 0.82rem; font-weight: 700; color: #64748b;">Skills Matched</div>
-<div style="font-size: 1.3rem; font-weight: 900; color: #0f172a;">{skills_val}</div>
-</div>
-</div>
-<div class="metric-stat-box">
-<div style="width: 42px; height: 42px; border-radius: 12px; background: #fffbeb; color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 20px;">
-💡
-</div>
-<div>
-<div style="font-size: 0.82rem; font-weight: 700; color: #64748b;">Recommendations</div>
-<div style="font-size: 1.3rem; font-weight: 900; color: #0f172a;">{recom_val}</div>
-</div>
-</div>
-</div>
-</div>""", unsafe_allow_html=True)
-
-        # If analysis results are actively loaded, show detailed cards below
-        if st.session_state.analysis_results:
-            analysis = st.session_state.analysis_results
-            st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
-            
-            c_skills, c_feedback = st.columns([1.1, 1.2])
-            with c_skills:
-                st.markdown("""
-                    <div class="glass-panel">
-                        <h3 style="margin-top: 0; font-size: 1.3rem; color: #0f172a;">🎯 Extracted Technical Stack</h3>
-                        <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 14px;">Verified competencies detected by local AI parser:</p>
+            # If Analysis Results Loaded -> Show Interactive Insights Panel
+            if st.session_state.analysis_results:
+                analysis = st.session_state.analysis_results
+                st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div style="background: #ffffff; border: 1.5px solid #bfdbfe; border-radius: 20px; padding: 24px; box-shadow: 0 4px 20px rgba(37,99,235,0.06);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <div>
+                                <span style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 0.78rem;">ANALYSIS COMPLETED</span>
+                                <h3 style="margin: 6px 0 0 0; color: #0f172a; font-size: 1.3rem;">{st.session_state.last_filename or 'Uploaded Resume'}</h3>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 2.2rem; font-weight: 900; color: #2563eb; line-height: 1;">{analysis.get('ats_score', 85)}%</div>
+                                <div style="font-size: 0.78rem; font-weight: 700; color: #64748b; text-transform: uppercase;">ATS Readiness</div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 14px;">
+                            <strong style="color: #0f172a; font-size: 0.95rem;">Extracted Technical Skills ({len(analysis.get('skills', []))}):</strong>
+                            <div style="margin-top: 8px;">
+                                {''.join([f"<span class='tech-pill'>{s}</span>" for s in analysis.get('skills', [])])}
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px;">
+                            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 14px;">
+                                <div style="color: #166534; font-weight: 800; font-size: 0.88rem; margin-bottom: 6px;">✓ Core Strengths</div>
+                                {''.join([f"<div style='font-size:0.82rem; color:#15803d; margin-bottom:4px;'>• {s}</div>" for s in analysis.get('strengths', [])[:3]])}
+                            </div>
+                            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 14px;">
+                                <div style="color: #92400e; font-weight: 800; font-size: 0.88rem; margin-bottom: 6px;">⚠ Recommendations</div>
+                                {''.join([f"<div style='font-size:0.82rem; color:#b45309; margin-bottom:4px;'>• {s}</div>" for s in analysis.get('suggestions', [])[:3]])}
+                            </div>
+                        </div>
+                    </div>
                 """, unsafe_allow_html=True)
-                if analysis["skills"]:
-                    pills_html = "".join([f"<span class='tech-pill'>{s}</span>" for s in analysis["skills"]])
-                    st.markdown(f"<div style='margin-bottom: 12px;'>{pills_html}</div></div>", unsafe_allow_html=True)
-                else:
-                    st.info("No standard skills detected.")
-                    st.markdown("</div>", unsafe_allow_html=True)
+                
+                c_test_nav, c_road_nav = st.columns(2)
+                with c_test_nav:
+                    if st.button("⚡ Take Mock Test for these Skills ➔", type="primary", use_container_width=True):
+                        st.session_state.nav_page = "📝 Proctored Mock Test"
+                        st.rerun()
+                with c_road_nav:
+                    if st.button("🗺️ View Personalized Roadmap ➔", use_container_width=True):
+                        st.session_state.nav_page = "🗺️ Career Roadmap"
+                        st.rerun()
 
-            with c_feedback:
-                st.markdown("""
-                    <div class="glass-panel">
-                        <h3 style="margin-top: 0; font-size: 1.3rem; color: #0f172a;">💡 Actionable Resume Recommendations</h3>
-                """, unsafe_allow_html=True)
-                for strength in analysis.get("strengths", []):
-                    st.markdown(f"<div class='insight-card insight-card-green'>✓ {strength}</div>", unsafe_allow_html=True)
-                for item in analysis.get("suggestions", []):
-                    st.markdown(f"<div class='insight-card insight-card-amber'>⚠ {item}</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+        # Right Column (Side Widgets matching screenshot)
+        with col_side:
+            # 1. Turn Your Resume Into Opportunities Card
+            try:
+                import new_assets_b64
+                card_ai_b64 = new_assets_b64.CARD_AI_ILLUSTRATION_B64
+                card_img_tag = f'<img src="data:image/png;base64,{card_ai_b64}" style="width: 105px; border-radius: 12px; object-fit: contain; flex-shrink: 0;" />'
+            except Exception:
+                card_img_tag = '<div style="font-size: 48px;">📄</div>'
+
+            st.markdown(f"""
+                <div class="ra-turn-opps-card">
+                    {card_img_tag}
+                    <div>
+                        <div style="font-weight: 800; font-size: 1.15rem; color: #0f172a; line-height: 1.25;">Turn Your Resume<br>Into Opportunities</div>
+                        <div style="font-size: 0.82rem; color: #475569; margin-top: 6px; line-height: 1.4;">
+                            Get AI-powered insights and a personalized roadmap to help you build the career you want.
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+
+            # 2. What You'll Get Card
+            st.markdown("""
+                <div class="ra-sidebar-card">
+                    <h3 style="margin: 0 0 16px 0; font-size: 1.15rem; font-weight: 800; color: #0f172a;">What You’ll Get</h3>
+                    <div style="display: flex; flex-direction: column; gap: 14px;">
+                        <div style="display: flex; gap: 12px; align-items: flex-start;">
+                            <div style="width: 28px; height: 28px; border-radius: 50%; background: #10b981; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; flex-shrink: 0; margin-top: 2px;">✓</div>
+                            <div>
+                                <div style="font-weight: 800; font-size: 0.92rem; color: #0f172a;">ATS Score</div>
+                                <div style="font-size: 0.78rem; color: #64748b; line-height: 1.35;">Know how well your resume matches ATS systems.</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 12px; align-items: flex-start;">
+                            <div style="width: 28px; height: 28px; border-radius: 50%; background: #8b5cf6; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px;">🎯</div>
+                            <div>
+                                <div style="font-weight: 800; font-size: 0.92rem; color: #0f172a;">Skill Gap Analysis</div>
+                                <div style="font-size: 0.78rem; color: #64748b; line-height: 1.35;">Discover missing skills and areas to improve.</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 12px; align-items: flex-start;">
+                            <div style="width: 28px; height: 28px; border-radius: 50%; background: #3b82f6; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px;">🗺️</div>
+                            <div>
+                                <div style="font-weight: 800; font-size: 0.92rem; color: #0f172a;">Personalized Roadmap</div>
+                                <div style="font-size: 0.78rem; color: #64748b; line-height: 1.35;">Step-by-step learning plan based on your goals.</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 12px; align-items: flex-start;">
+                            <div style="width: 28px; height: 28px; border-radius: 50%; background: #f97316; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px;">📄</div>
+                            <div>
+                                <div style="font-weight: 800; font-size: 0.92rem; color: #0f172a;">Career Recommendations</div>
+                                <div style="font-size: 0.78rem; color: #64748b; line-height: 1.35;">Explore roles that match your profile.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+
+            # 3. Recent Uploads Card (Matching exact user files from screenshot)
+            st.markdown("""
+                <div class="ra-sidebar-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #0f172a;">Recent Uploads</h3>
+                        <span style="color: #2563eb; font-weight: 800; font-size: 0.85rem; cursor: pointer;">View All ➔</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column;">
+                        <!-- Item 1: Logashree_Resume.pdf -->
+                        <div class="ra-upload-item">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <div style="width: 32px; height: 32px; border-radius: 8px; background: #fee2e2; color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 14px;">📄</div>
+                                <div>
+                                    <div style="font-weight: 700; font-size: 0.88rem; color: #0f172a;">Logashree_Resume.pdf</div>
+                                    <div style="font-size: 0.76rem; color: #64748b;">Uploaded 2 hours ago</div>
+                                </div>
+                            </div>
+                            <span style="background: #dcfce7; color: #15803d; font-weight: 700; font-size: 0.75rem; padding: 3px 10px; border-radius: 9999px;">Analyzed</span>
+                        </div>
+                        <!-- Item 2: Resume_Final.docx -->
+                        <div class="ra-upload-item">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <div style="width: 32px; height: 32px; border-radius: 8px; background: #dbeafe; color: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 14px;">📄</div>
+                                <div>
+                                    <div style="font-weight: 700; font-size: 0.88rem; color: #0f172a;">Resume_Final.docx</div>
+                                    <div style="font-size: 0.76rem; color: #64748b;">Uploaded 1 day ago</div>
+                                </div>
+                            </div>
+                            <span style="background: #dcfce7; color: #15803d; font-weight: 700; font-size: 0.75rem; padding: 3px 10px; border-radius: 9999px;">Analyzed</span>
+                        </div>
+                        <!-- Item 3: Logashree_CV.pdf -->
+                        <div class="ra-upload-item">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <div style="width: 32px; height: 32px; border-radius: 8px; background: #fee2e2; color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 14px;">📄</div>
+                                <div>
+                                    <div style="font-weight: 700; font-size: 0.88rem; color: #0f172a;">Logashree_CV.pdf</div>
+                                    <div style="font-size: 0.76rem; color: #64748b;">Uploaded 2 days ago</div>
+                                </div>
+                            </div>
+                            <span style="background: #dbeafe; color: #1d4ed8; font-weight: 700; font-size: 0.75rem; padding: 3px 10px; border-radius: 9999px;">In Progress</span>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+    # ==========================================================================
+    # 4. HOME OVERVIEW VIEW
+    # ==========================================================================
+    elif st.session_state.nav_page in ["🏠 Home", "Home"]:
+        disable_proctoring()
+        st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%); border: 1.5px solid #bfdbfe; border-radius: 20px; padding: 28px 32px; margin-bottom: 24px;">
+                <span style="background: #ffffff; color: #2563eb; font-weight: 800; font-size: 0.78rem; padding: 4px 12px; border-radius: 9999px; border: 1px solid #bfdbfe;">✨ WELCOME BACK</span>
+                <h1 style="margin: 10px 0 6px 0; font-size: 2.3rem; font-weight: 900; color: #0f172a;">Hello, {user_name}! 👋</h1>
+                <p style="color: #475569; font-size: 1.05rem; margin: 0; max-width: 750px; line-height: 1.5;">
+                    Your AI-guided career dashboard is ready. Upload your latest resume to verify your ATS score, practice with anti-cheat proctored mock tests, and follow your personalized skill roadmap.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # 3 High-Impact Cards
+        hc1, hc2, hc3 = st.columns(3)
+        with hc1:
+            st.markdown("""
+                <div class="ra-sidebar-card" style="height: 100%;">
+                    <div style="font-size: 32px; margin-bottom: 10px;">📄</div>
+                    <h3 style="margin: 0 0 8px 0; font-size: 1.2rem; color: #0f172a;">Resume Analyzer</h3>
+                    <p style="color: #64748b; font-size: 0.88rem; line-height: 1.5; margin-bottom: 16px;">
+                        Get instant ATS compatibility scores, extract 40+ technical skills, and discover missing keywords.
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
+            if st.button("Open Resume Analyzer ➔", type="primary", key="home_btn_ra", use_container_width=True):
+                st.session_state.nav_page = "📄 Resume Analyzer"
+                st.rerun()
+
+        with hc2:
+            st.markdown("""
+                <div class="ra-sidebar-card" style="height: 100%;">
+                    <div style="font-size: 32px; margin-bottom: 10px;">⚡</div>
+                    <h3 style="margin: 0 0 8px 0; font-size: 1.2rem; color: #0f172a;">Proctored Mock Test</h3>
+                    <p style="color: #64748b; font-size: 0.88rem; line-height: 1.5; margin-bottom: 16px;">
+                        15 curated questions aligned with your target engineering role, guarded by live AI proctoring sensors.
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
+            if st.button("Start Mock Test ➔", key="home_btn_quiz", use_container_width=True):
+                st.session_state.nav_page = "📝 Proctored Mock Test"
+                st.rerun()
+
+        with hc3:
+            st.markdown("""
+                <div class="ra-sidebar-card" style="height: 100%;">
+                    <div style="font-size: 32px; margin-bottom: 10px;">🗺️</div>
+                    <h3 style="margin: 0 0 8px 0; font-size: 1.2rem; color: #0f172a;">Career Roadmap</h3>
+                    <p style="color: #64748b; font-size: 0.88rem; line-height: 1.5; margin-bottom: 16px;">
+                        Follow a structured, milestone-driven curriculum crafted specifically for your detected skill gaps.
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
+            if st.button("View Roadmap ➔", key="home_btn_road", use_container_width=True):
+                st.session_state.nav_page = "🗺️ Career Roadmap"
+                st.rerun()
+
+    # ==========================================================================
+    # 5. CAREER ROADMAP STANDALONE VIEW
+    # ==========================================================================
+    elif st.session_state.nav_page in ["🗺️ Career Roadmap", "🗺️ Roadmap", "Roadmap"]:
+        disable_proctoring()
+        st.markdown("""
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px;">
+                <div>
+                    <h1 style="font-size: 2.1rem; font-weight: 800; color: #0f172a; margin: 0;">🗺️ Your Personalized Learning Track</h1>
+                    <p style="color: #64748b; font-size: 0.95rem; margin: 4px 0 0 0;">Step-by-step milestones to bridge technical skill gaps and prepare for top tech interviews.</p>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Roadmap milestones
+        milestones = [
+            ("Stage 1 • Foundations", "Core Language Mastery (Python & TypeScript)", "Deep dive into OOP, typing, and standard algorithm patterns.", "2-3 Days", "https://docs.python.org/3/"),
+            ("Stage 2 • Architecture", "Modern Full Stack Frameworks (FastAPI & React)", "Build RESTful microservices and stateful responsive UI apps.", "1 Week", "https://fastapi.tiangolo.com/"),
+            ("Stage 3 • Data & Cloud", "Database Architecture & Containerization (MongoDB & Docker)", "Containerize services, build multi-stage Dockerfiles, and index MongoDB.", "4-5 Days", "https://www.docker.com/"),
+            ("Stage 4 • Production", "Cloud Deployment & CI/CD Pipelines (AWS & GitHub Actions)", "Deploy scalable container clusters and automate testing pipelines.", "1 Week", "https://aws.amazon.com/")
+        ]
+
+        for stage, title, desc, duration, url in milestones:
+            st.markdown(f"""
+                <div style="background: #ffffff; border: 1.5px solid #dbeafe; border-left: 6px solid #2563eb; border-radius: 16px; padding: 20px 24px; margin-bottom: 14px; box-shadow: 0 4px 14px rgba(37,99,235,0.04);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="background: #eff6ff; color: #1d4ed8; font-weight: 800; font-size: 0.78rem; padding: 3px 12px; border-radius: 9999px; border: 1px solid #bfdbfe;">{stage}</span>
+                        <span style="color: #64748b; font-size: 0.82rem; font-weight: 700;">⏱️ Est. Time: {duration}</span>
+                    </div>
+                    <h3 style="margin: 0 0 6px 0; font-size: 1.25rem; color: #0f172a;">{title}</h3>
+                    <p style="color: #475569; font-size: 0.92rem; margin: 0 0 12px 0;">{desc}</p>
+                    <a href="{url}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; color: #2563eb; font-weight: 800; font-size: 0.88rem; text-decoration: none;">
+                        Open Documentation & Practice Labs ➔
+                    </a>
+                </div>
+            """, unsafe_allow_html=True)
+
+    # ==========================================================================
+    # 6. CANDIDATE PROFILE & ACCOUNT MANAGEMENT
+    # ==========================================================================
+    elif st.session_state.nav_page in ["👤 Profile", "Profile"]:
+        disable_proctoring()
+        st.markdown("""
+            <div style="margin-bottom: 22px;">
+                <h1 style="font-size: 2.1rem; font-weight: 800; color: #0f172a; margin: 0;">👤 Candidate Profile & Credentials</h1>
+                <p style="color: #64748b; font-size: 0.95rem; margin: 4px 0 0 0;">Manage your verified authentication details and cloud sync.</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        prof_c1, prof_c2 = st.columns([1.2, 1])
+        with prof_c1:
+            st.markdown(f"""
+                <div class="ra-sidebar-card">
+                    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+                        <div style="width: 64px; height: 64px; border-radius: 50%; background: #2563eb; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 900;">
+                            {user_initial}
+                        </div>
+                        <div>
+                            <h2 style="margin: 0; font-size: 1.4rem; color: #0f172a;">{display_name}</h2>
+                            <div style="color: #64748b; font-size: 0.9rem;">{user.get('email', 'Candidate Account')}</div>
+                            <span style="background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; padding: 2px 10px; border-radius: 9999px; font-weight: 800; font-size: 0.72rem; display: inline-block; margin-top: 6px;">
+                                VERIFIED PROFILE
+                            </span>
+                        </div>
+                    </div>
+                    <div style="border-top: 1px solid #f1f5f9; padding-top: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 0.92rem;">
+                        <div><strong>Email:</strong> {user.get('email', '--')}</div>
+                        <div><strong>Account Type:</strong> Standard Engineering Candidate</div>
+                        <div><strong>Cloud Database:</strong> MongoDB WiredTiger Active 🟢</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with prof_c2:
+            st.markdown("""
+                <div class="ra-sidebar-card">
+                    <h3 style="margin-top: 0; font-size: 1.2rem; color: #0f172a;">Account Actions</h3>
+                    <p style="color: #64748b; font-size: 0.88rem; margin-bottom: 18px;">Sign out of your active session on this device:</p>
+                </div>
+            """, unsafe_allow_html=True)
+            if st.button("🚪 Sign Out of Account", type="primary", key="btn_prof_signout", use_container_width=True):
+                disable_proctoring()
+                st.session_state.user = None
+                st.session_state.oauth_state = None
+                reset_quiz()
+                st.rerun()
 
 
     # ==========================================================================

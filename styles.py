@@ -132,7 +132,53 @@ def apply_custom_styles():
             #MainMenu { visibility: hidden !important; }
             footer { display: none !important; }
             [data-testid="collapsedControl"] { display: none !important; }
-            section[data-testid="stSidebar"] { display: none !important; }
+
+            /* Modern SaaS Sidebar Styling matching User Screenshot */
+            section[data-testid="stSidebar"] {
+                display: block !important;
+                background-color: #ffffff !important;
+                border-right: 1.5px solid #e2e8f0 !important;
+                width: 250px !important;
+                min-width: 250px !important;
+                max-width: 250px !important;
+                box-shadow: 2px 0 10px rgba(15, 23, 42, 0.03) !important;
+            }
+            section[data-testid="stSidebar"] > div:first-child {
+                padding: 1.2rem 0.9rem !important;
+            }
+            /* Sidebar Nav Buttons */
+            section[data-testid="stSidebar"] div.stButton > button {
+                width: 100% !important;
+                display: flex !important;
+                justify-content: flex-start !important;
+                align-items: center !important;
+                border-radius: 12px !important;
+                padding: 10px 14px !important;
+                font-size: 0.95rem !important;
+                font-weight: 600 !important;
+                border: none !important;
+                background: transparent !important;
+                color: #475569 !important;
+                box-shadow: none !important;
+                transition: all 0.15s ease !important;
+                text-align: left !important;
+                gap: 10px !important;
+            }
+            section[data-testid="stSidebar"] div.stButton > button:hover {
+                background-color: #f8fafc !important;
+                color: #0f172a !important;
+            }
+            /* Sidebar Active Nav Button (Highlight Capsule) */
+            section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+                background-color: #eef2ff !important;
+                color: #2563eb !important;
+                font-weight: 800 !important;
+                border: none !important;
+            }
+            section[data-testid="stSidebar"] div.stButton > button[kind="primary"] * {
+                color: #2563eb !important;
+                font-weight: 800 !important;
+            }
 
             /* Enterprise White & Royal Blue Design System Variables */
             :root {
@@ -153,7 +199,7 @@ def apply_custom_styles():
             /* Global App Canvas */
             html, body, [class*="css"], .stApp {
                 font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-                background-color: transparent !important;
+                background-color: #f8fafc !important;
                 color: #0f172a !important;
             }
 
@@ -174,7 +220,9 @@ def apply_custom_styles():
                 z-index: 1 !important;
                 padding-top: 1.2rem !important;
                 padding-bottom: 3.5rem !important;
-                max-width: 1200px !important;
+                padding-left: 2rem !important;
+                padding-right: 2rem !important;
+                max-width: 1350px !important;
             }
 
             /* Top Unified Header matching media_1791308758811.png */
@@ -898,6 +946,100 @@ def apply_custom_styles():
                 background: linear-gradient(90deg, #2563eb 0%, #38bdf8 50%, #22c55e 100%);
                 border-radius: 10px;
                 transition: width 1s ease-in-out;
+            }
+
+            /* ============================================================== */
+            /* RESUME ANALYZER SAAS UI/UX (EXACT SCREENSHOT MATCH)           */
+            /* ============================================================== */
+            .ra-header-icon {
+                width: 58px;
+                height: 58px;
+                border-radius: 16px;
+                background: #ede9fe;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+            .ra-badge-card {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                background: #ffffff;
+                border: 1.5px solid #e2e8f0;
+                border-radius: 14px;
+                padding: 12px 16px;
+                box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
+                transition: transform 0.2s ease, border-color 0.2s ease;
+            }
+            .ra-badge-card:hover {
+                transform: translateY(-2px);
+                border-color: #cbd5e1;
+            }
+            .ra-upload-card {
+                background: #ffffff;
+                border: 1.5px solid #e2e8f0;
+                border-radius: 20px;
+                padding: 24px;
+                box-shadow: 0 4px 18px rgba(15, 23, 42, 0.03);
+            }
+            .ra-dropzone-inner {
+                background: #f8fafc;
+                border: 2px dashed #93c5fd;
+                border-radius: 16px;
+                padding: 34px 20px;
+                text-align: center;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+            }
+            .ra-sample-card {
+                background: #ffffff;
+                border: 1.5px solid #e2e8f0;
+                border-radius: 16px;
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
+            }
+            .ra-tip-card {
+                background: #eff6ff;
+                border: 1.5px solid #bfdbfe;
+                border-radius: 12px;
+                padding: 13px 18px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .ra-turn-opps-card {
+                background: linear-gradient(135deg, #f5f3ff 0%, #eff6ff 100%);
+                border: 1.5px solid #ddd6fe;
+                border-radius: 20px;
+                padding: 24px;
+                display: flex;
+                gap: 18px;
+                align-items: center;
+                box-shadow: 0 4px 20px rgba(99, 102, 241, 0.06);
+            }
+            .ra-sidebar-card {
+                background: #ffffff;
+                border: 1.5px solid #e2e8f0;
+                border-radius: 20px;
+                padding: 22px 24px;
+                box-shadow: 0 4px 18px rgba(15, 23, 42, 0.03);
+            }
+            .ra-upload-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 12px 0;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            .ra-upload-item:last-child {
+                border-bottom: none;
+                padding-bottom: 0;
             }
         </style>
     """, unsafe_allow_html=True)
